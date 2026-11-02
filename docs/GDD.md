@@ -119,7 +119,7 @@ Les seuils dépendent du scénario (par défaut 85 % / 95 %, mais 70 % / 80 % un
 
 ### 5.1 Gares (12)
 La Défense · Puteaux · Suresnes-Mont-Valérien · Saint-Cloud · Sèvres-Ville-d'Avray ·
-Chaville-Rive-Droite · Viroflay-Rive-Droite · Versailles-Chantiers · Saint-Cyr ·
+Chaville-Rive-Droite · Versailles-Chantiers · Saint-Cyr ·
 Saint-Quentin-en-Yvelines · Trappes · La Verrière
 
 *(À vérifier avec les données ouvertes d'Île-de-France Mobilités pendant la V0.)*
@@ -261,7 +261,7 @@ Bonus de retour après une absence, défi hebdo jouable en 20 min, box de rattra
 
 **Principe : l'argent achète du temps et du style, jamais du skill.**
 
-- **Pass Navigo** (mensuel, ~4,99 €) : piste gratuite + piste premium (livrées, box bonus,
+- **Pass Navigo** (mensuel, ~2,99 €) : piste gratuite + piste premium (livrées, box bonus,
   quelques accélérateurs de chantier).
 - **Livrées** (skins de rames) : historiques, éditions spéciales. Possibilité de **nommer ses
   rames** et de personnaliser la plaque de sa gare.
