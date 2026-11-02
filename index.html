@@ -15,112 +15,102 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,400;0,6..12,600;0,6..12,700;0,6..12,800;0,6..12,900;1,6..12,600&family=Doto:wght@700;900&display=swap">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/drive.css">
 </head>
 <body>
 <div id="app">
-  <header id="hud">
-    <div class="hud-top">
-      <div class="pict" aria-hidden="true">U</div>
-      <div class="hud-line"><b>Ligne U</b><span>PCC · Régulation</span></div>
-      <div id="clock" class="clock">06:30</div>
-      <button id="btn-pause" class="round-btn" type="button" aria-label="Mettre en pause">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
+  <section id="game">
+    <header class="top">
+      <button id="btn-pause" class="round" type="button" aria-label="Pause">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
       </button>
+      <div class="top-mid">
+        <div class="top-title"><span class="pict">U</span><b id="mission-title">Mission</b><span id="clock" class="top-clock">07:41:00</span></div>
+        <div id="strip" class="strip"></div>
+      </div>
+      <div class="top-score">
+        <span id="score" class="score">0</span>
+        <span id="combo" class="combo" hidden></span>
+      </div>
+    </header>
+
+    <div id="world-wrap">
+      <canvas id="world" aria-label="Vue de la voie"></canvas>
+      <div id="ghost-delta" class="ghost-delta" hidden></div>
+      <div id="alert" class="alert" hidden></div>
+      <div id="pops" class="pops"></div>
+      <div id="toast" class="toast" hidden></div>
     </div>
-    <div class="hud-stats">
-      <div class="stat"><span class="k">Régularité</span><span id="reg" class="v">100,0 %</span></div>
-      <div class="stat stat-sat"><span class="k">Satisfaction</span><div id="sat-bar" class="sat-bar" aria-label="Satisfaction"></div></div>
-      <div class="stat stat-streak"><span class="k">Série</span><span id="streak" class="v">0</span></div>
-    </div>
-    <div class="hud-progress"><div id="progress-fill"></div></div>
-  </header>
 
-  <div class="ticker" aria-live="polite">
-    <span class="ticker-tag">Info trafic</span>
-    <div class="ticker-win"><span id="ticker-text">Trafic normal sur l'ensemble de la ligne U</span></div>
-  </div>
+    <section id="console">
+      <div class="c-speed">
+        <canvas id="speedo" width="150" height="150" aria-label="Vitesse"></canvas>
+      </div>
+      <div class="c-info">
+        <div class="c-next">
+          <span class="c-k" id="next-k">Prochain arrêt</span>
+          <span class="c-name" id="next-name">—</span>
+        </div>
+        <div class="c-dist"><b id="dist">—</b><span id="sched" class="sched"></span></div>
+        <div id="gauge" class="gauge" hidden>
+          <div class="gauge-zones"><i class="z3"></i><i class="z2"></i><i class="z1"></i><i class="z0"></i><i class="z1"></i><i class="z2"></i><i class="z3"></i></div>
+          <div id="gauge-nose" class="gauge-nose"></div>
+          <div class="gauge-mark"></div>
+        </div>
+        <div id="chips" class="chips"></div>
+      </div>
+      <div class="c-buttons">
+        <button id="btn-horn" class="cbtn" type="button"><span class="cbtn-ico">◖◗</span><span>Klaxon</span></button>
+        <button id="btn-doors" class="cbtn doors" type="button" disabled><span class="cbtn-ico">⇤⇥</span><span id="doors-lbl">Portes</span><i id="doors-fill" class="doors-fill"></i></button>
+      </div>
+      <div class="c-lever">
+        <div id="lever" class="lever" role="slider" aria-label="Manipulateur traction freinage" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+          <span class="lv-lab lv-t">T</span>
+          <span class="lv-lab lv-0">0</span>
+          <span class="lv-lab lv-f">F</span>
+          <span class="lv-lab lv-fu">FU</span>
+          <div class="lv-track"><i class="lv-fill" id="lever-fill"></i></div>
+          <div id="lever-knob" class="lv-knob"><span id="lever-val">0</span></div>
+        </div>
+      </div>
+    </section>
+  </section>
 
-  <main id="stage">
-    <canvas id="tco" aria-label="Schéma de la ligne U"></canvas>
-    <div id="toast" class="toast" hidden></div>
-  </main>
-
-  <section id="card" class="card-panel" hidden></section>
-  <section id="dilemma" class="dilemma" hidden></section>
-
-  <footer id="dock">
-    <div id="crew" class="crew"></div>
-    <div class="dock-actions">
-      <button id="btn-reserve" class="dock-btn" type="button">
-        <span class="dock-ico" aria-hidden="true">＋</span><span class="dock-lbl">Réserve</span><span class="dock-count" id="reserve-count">2</span>
-      </button>
-      <button id="btn-annonce" class="dock-btn" type="button">
-        <span class="dock-ico" aria-hidden="true">◉</span><span class="dock-lbl">Annonce</span><span class="dock-count" id="annonce-state"></span>
-      </button>
-    </div>
-  </footer>
-
-  <!-- Écran d'accueil : tableau des départs -->
+  <!-- Tableau des départs : choix de mission -->
   <div id="screen-start" class="screen board-screen">
     <div class="board">
       <div class="board-head">
         <div>
           <h1 class="board-title">Départs</h1>
-          <p class="board-sub"><i>Régulation</i> · Ligne U</p>
+          <p class="board-sub"><i>Conduite</i> · Ligne U</p>
         </div>
-        <div class="board-brand">
-          <span class="pict pict-lg">U</span>
-          <span class="board-name">Ukipu</span>
-        </div>
+        <div class="board-brand"><span class="pict pict-lg">U</span><span class="board-name">Ukipu</span></div>
       </div>
-      <button id="btn-start" class="row row-play" type="button">
-        <span class="row-time" data-flap>06:30</span>
-        <span class="row-mid">
-          <span class="row-type">Service · Voie U</span>
-          <span class="row-dest" data-flap>Lundi de pointe</span>
-          <span class="row-via">La Défense › La Verrière</span>
-        </span>
-        <span class="pill pill-ok">À l'heure</span>
-        <span class="row-go" aria-hidden="true">›</span>
-      </button>
-      <div class="row row-locked">
-        <span class="row-time">07:00</span>
-        <span class="row-mid"><span class="row-type">Service</span><span class="row-dest">Grève surprise</span></span>
-        <span class="pill pill-off">Bientôt</span>
-      </div>
-      <div class="row row-locked">
-        <span class="row-time">17:30</span>
-        <span class="row-mid"><span class="row-type">Service</span><span class="row-dest">Retour du soir</span></span>
-        <span class="pill pill-off">Bientôt</span>
-      </div>
-      <div class="row row-locked">
-        <span class="row-time">06:00</span>
-        <span class="row-mid"><span class="row-type">Service</span><span class="row-dest">Neige sur les Yvelines</span></span>
-        <span class="pill pill-off">Bientôt</span>
-      </div>
+      <div id="missions"></div>
       <label class="row row-input" for="pseudo">
         <span class="row-time small">Agent</span>
         <input id="pseudo" type="text" maxlength="16" autocomplete="nickname" placeholder="Ton pseudo">
       </label>
       <div class="board-foot">
-        <span id="best" class="best"></span>
-        <span class="howto"><b>⚠</b> incident : choisis la réponse · <b>Train</b> : retiens, envoie en direct, fais demi-tour</span>
+        <span id="stars-total" class="best"></span>
+        <span class="howto">Pupitre : <b>manipulateur</b> à droite (haut = traction, bas = freinage) · <b>Klaxon</b> · <b>Portes</b></span>
+        <a class="switch" href="regulation.html">Mode régulation (prototype) ›</a>
       </div>
     </div>
   </div>
 
+  <!-- Fiche mission -->
+  <div id="screen-brief" class="screen" hidden>
+    <div class="board board-small" id="brief"></div>
+  </div>
+
   <div id="screen-pause" class="screen" hidden>
     <div class="board board-small">
-      <div class="board-head"><h2 class="board-title">Service suspendu</h2></div>
-      <button id="btn-resume" class="row row-play" type="button">
-        <span class="row-mid"><span class="row-dest">Reprendre le service</span></span>
-        <span class="row-go" aria-hidden="true">›</span>
-      </button>
-      <button id="btn-quit" class="row row-quit" type="button">
-        <span class="row-mid"><span class="row-dest">Quitter le poste</span></span>
-        <span class="pill pill-cancel">Abandon</span>
-      </button>
+      <div class="board-head"><h2 class="board-title">Pause</h2></div>
+      <button id="btn-resume" class="row row-play" type="button"><span class="row-mid"><span class="row-dest">Reprendre</span></span><span class="row-go" aria-hidden="true">›</span></button>
+      <button id="btn-restart" class="row row-plain" type="button"><span class="row-mid"><span class="row-dest">Recommencer</span></span></button>
+      <button id="btn-sound" class="row row-plain" type="button"><span class="row-mid"><span class="row-dest" id="sound-lbl">Son : activé</span></span></button>
+      <button id="btn-quit" class="row row-plain" type="button"><span class="row-mid"><span class="row-dest">Retour aux départs</span></span></button>
     </div>
   </div>
 
@@ -128,13 +118,17 @@
     <div class="end-wrap">
       <article class="ticket" id="ticket"></article>
       <div class="end-actions">
-        <button id="btn-again" class="big-btn" type="button">Reprendre un service</button>
+        <button id="btn-again" class="big-btn" type="button">Rejouer</button>
+        <div class="end-row">
+          <button id="btn-next" class="ghost-btn" type="button">Mission suivante</button>
+          <button id="btn-board" class="ghost-btn" type="button">Départs</button>
+        </div>
         <button id="btn-copy" class="ghost-btn" type="button">Copier pour le groupe</button>
         <textarea id="copy-fallback" class="copy-fallback" readonly hidden></textarea>
       </div>
     </div>
   </div>
 </div>
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/drive/main.js"></script>
 </body>
 </html>

@@ -4,16 +4,19 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
-## V0.2 — prototype
+## V0.3 — mode conduite
 
-Un service de 5 minutes sur la ligne U (lundi de pointe, 06:30 → 09:30), sans serveur, dans l'univers des écrans en gare.
+Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 1 min 30 à 2 min 30.
 
-- **Incidents** (carré orange) : chacun propose plusieurs réponses — le spécialiste, un autre agent, ou une solution alternative avec sa contrepartie (voie unique, évacuation, marche à vue…).
-- **Trains** : touchez-les pour les retenir, les passer en direct, leur faire faire demi-tour ou les supprimer. Raccourcis : glisser vers l'avant = direct, vers l'arrière = demi-tour.
-- **Dilemmes** : journaliste à bord, conducteur volontaire, visite du directeur, rame neuve, la N qui demande le passage… 14 secondes pour trancher.
-- **Séries** : enchaîner les trains à l'heure débloque des bonus (agents disponibles, applaudissements).
-- **Poste de Versailles en panne** : touchez « GO » sur chaque train, un à la fois.
-- Score : régularité (trains arrivés au terminus avec moins de 5 min de retard). Si la satisfaction tombe à zéro, le service est interrompu.
+- **Manipulateur** (à droite) : vers le haut = traction, vers le bas = freinage, tout en bas = freinage d'urgence. Au clavier : flèches haut/bas, `0` pour le neutre.
+- **Arrêt précis** : s'arrêter pile sur le repère en bout de quai. PARFAIT (< 0,5 m), SUPER, BIEN, OK… Les arrêts parfaits enchaînés font monter le combo.
+- **Portes** : fermer dès que tout le monde est monté (trop tôt = voyageurs restés à quai, trop tard = temps perdu). Parfois un retardataire court sur le quai.
+- **Horaire** : arriver pile à l'heure rapporte des points ; impossible de repartir avant l'heure de départ.
+- **Aléas** : signaux fermés (train de la L ou de la N devant), limitations (KVB si survitesse), feuilles mortes et pluie (patinage, enrayage), sanglier et agents sur la voie (klaxon !).
+- **Fantôme** : le conducteur titulaire, puis ton propre record, roulent avec toi.
+- **Progression** : 5 missions débloquées par les étoiles + un défi du jour identique pour tout le monde.
+
+Le mode régulation (V0.2) reste jouable via `regulation.html`.
 
 ## Lancer en local
 
@@ -30,6 +33,10 @@ Puis ouvrir http://localhost:8000. Ajouter `?vitesse=4` à l'adresse pour accél
 La simulation est déterministe (seed + actions) et tourne aussi sans navigateur :
 
 ```bash
+node tools/drive-test.js
+```
+
+```bash
 node tools/headless.js 30 idle
 ```
 
@@ -43,7 +50,12 @@ node tools/headless.js 30 bot
 
 | Fichier | Rôle |
 |---|---|
-| `index.html`, `css/style.css` | Interface (PWA, iPhone et PC) |
+| `index.html`, `css/drive.css` | Mode conduite (PWA, iPhone et PC) |
+| `js/drive/route.js` | Tracé de la U, missions, aléas, défi du jour |
+| `js/drive/sim.js` | Physique et règles de conduite déterministes, conducteur titulaire (IA) |
+| `js/drive/world.js` | Vue de côté : décors en parallaxe, quais, Z 2N |
+| `js/drive/main.js`, `js/drive/audio.js` | Pupitre, écrans, sons synthétisés |
+| `regulation.html`, `css/style.css` | Ancien mode régulation |
 | `js/data.js` | Ligne U, personnel, incidents, scénario |
 | `js/sim.js` | Simulation déterministe — réutilisable côté serveur pour rejouer une partie |
 | `js/render.js` | Dessin du TCO (schéma de ligne) sur Canvas |
