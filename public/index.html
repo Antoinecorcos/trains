@@ -86,17 +86,20 @@
         </div>
         <div class="board-brand"><span class="pict pict-lg">U</span><span class="board-name">Ukipu</span></div>
       </div>
+      <div id="account" class="account"></div>
       <div id="missions"></div>
-      <label class="row row-input" for="pseudo">
-        <span class="row-time small">Agent</span>
-        <input id="pseudo" type="text" maxlength="16" autocomplete="nickname" placeholder="Ton pseudo">
-      </label>
+      <div id="feed" class="feed" hidden></div>
       <div class="board-foot">
         <span id="stars-total" class="best"></span>
         <span class="howto">Pupitre : <b>manipulateur</b> à droite (haut = traction, bas = freinage) · <b>Klaxon</b> · <b>Portes</b></span>
         <a class="switch" href="regulation.html">Mode régulation (prototype) ›</a>
       </div>
     </div>
+  </div>
+
+  <!-- Classement général -->
+  <div id="screen-ranking" class="screen" hidden>
+    <div class="board board-small" id="ranking"></div>
   </div>
 
   <!-- Fiche mission -->

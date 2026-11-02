@@ -115,8 +115,19 @@ export const MISSIONS = [
 ];
 
 // Défi du jour : un tronçon et des aléas tirés au hasard, identiques pour tout le monde ce jour-là.
-export function dailyMission(date = new Date()) {
-  const key = Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`);
+export const dailyKey = (date = new Date()) => Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`);
+
+// Retrouve une mission par son identifiant (y compris « daily-AAAAMMJJ »)
+export function missionById(id) {
+  const m = MISSIONS.find((x) => x.id === id);
+  if (m) return m;
+  const d = /^daily-(\d{8})$/.exec(id);
+  if (d) return dailyMission(null, Number(d[1]));
+  return null;
+}
+
+export function dailyMission(date = new Date(), forcedKey = null) {
+  const key = forcedKey ?? dailyKey(date);
   const rng = mulberry32(key);
   const from = Math.floor(rng() * 5);
   const len = 5 + Math.floor(rng() * 2);
@@ -127,6 +138,7 @@ export function dailyMission(date = new Date()) {
     weather, light: 0.4 + rng() * 0.5,
     blurb: `${STATIONS[from].name} → ${STATIONS[to].name}. Mêmes conditions pour tout le monde aujourd'hui.`,
     build: (h) => {
+      const rng = mulberry32(key * 7 + 1); // tirage propre à chaque construction : même résultat à chaque fois
       const picks = ['signal', 'limit', 'leaves', 'animal', 'works', 'runner'];
       for (let s = from; s < to; s++) {
         const p = picks[Math.floor(rng() * picks.length)];

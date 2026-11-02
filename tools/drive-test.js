@@ -1,6 +1,6 @@
 // Fait rouler le conducteur titulaire sur chaque mission pour vérifier horaires et notes.
-import { MISSIONS, dailyMission } from '../js/drive/route.js';
-import { createRun, step, aiInput, computeSchedule } from '../js/drive/sim.js';
+import { MISSIONS, dailyMission } from '../public/js/drive/route.js';
+import { createRun, step, aiInput, computeSchedule } from '../public/js/drive/sim.js';
 
 for (const m of [...MISSIONS, dailyMission()]) {
   const sched = computeSchedule(m);

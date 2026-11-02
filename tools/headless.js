@@ -1,6 +1,6 @@
 // Fait tourner des services sans affichage pour calibrer la difficulté.
 // Usage : node tools/headless.js [nombre de parties] [politique: idle|bot]
-import { createGame, warmup, step, apply, activeIncidents, crewState, trainDelay, trainActions } from '../js/sim.js';
+import { createGame, warmup, step, apply, activeIncidents, crewState, trainDelay, trainActions } from '../public/js/sim.js';
 
 const runs = Number(process.argv[2] ?? 20);
 const policy = process.argv[3] ?? 'idle';

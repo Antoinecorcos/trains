@@ -195,8 +195,9 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 .lv-knob.fu { background: linear-gradient(180deg, #ff8a90, #e33b45); color: #fff; }
 
 /* ---------- Écrans ---------- */
+.screen > * { margin: auto; }
 .screen {
-  position: absolute; inset: 0; z-index: 20; overflow-y: auto; display: grid; place-items: center;
+  position: absolute; inset: 0; z-index: 20; overflow-y: auto; display: grid;
   padding: max(16px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
   background: rgba(7, 12, 51, 0.84); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
 }
@@ -320,3 +321,45 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Compte, fil d'actu, classements ---------- */
+.acc-note { margin: 0; padding: 0 16px 12px; font-size: 12px; font-weight: 700; color: var(--soft); }
+.acc-row { grid-template-columns: 62px minmax(0, 1fr) auto; }
+.acc-btns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.acc-btns .pill { justify-content: center; cursor: pointer; }
+.acc-form { display: grid; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+.acc-title { margin: 0; font-size: 13px; font-weight: 700; color: var(--soft); }
+.acc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.acc-fields input {
+  min-width: 0; font: inherit; font-size: 16px; font-weight: 800; color: var(--white); background: var(--board-2); border: 0; border-radius: 6px; padding: 10px 11px;
+  box-shadow: 0 0 0 1px var(--rule) inset; user-select: text; -webkit-user-select: text;
+}
+.acc-fields input::placeholder { color: var(--dim); }
+.acc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.big-btn.small, .ghost-btn.small { padding: 11px; font-size: 15px; }
+.acc-err { margin: 0; min-height: 1em; font-size: 13px; font-weight: 800; color: #ff9aa2; }
+.feed { padding: 10px 16px 6px; border-bottom: 1px solid var(--rule); background: rgba(0, 0, 0, 0.12); }
+.feed-title { margin: 0 0 6px; font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--led); }
+.feed-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 0; font-size: 13px; font-weight: 700; border-top: 1px solid var(--rule-soft); }
+.feed-item:first-of-type { border-top: 0; }
+.feed-item small { flex: none; color: var(--dim); font-size: 11px; }
+.feed-item.crown span { color: var(--yellow); }
+.feed-item.shame span { color: #ffb08a; }
+.note-row { margin: 0; padding: 14px 16px; font-size: 14px; font-weight: 700; color: var(--soft); }
+.rk-row { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.rk-row.me { background: rgba(255, 210, 0, 0.1); }
+.crowns { font-size: 13px; color: var(--yellow); }
+.brief-lb { display: grid; gap: 6px; }
+.lb-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center;
+  padding: 8px 11px; border-radius: 8px; background: var(--board-2); text-align: left; box-shadow: 0 0 0 1px var(--rule-soft) inset;
+}
+.lb-row b { font-weight: 900; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-row small { grid-column: 1; font-size: 12px; font-weight: 700; color: var(--soft); }
+.lb-row i { grid-column: 2; grid-row: 1 / span 2; font-style: normal; font-size: 11px; font-weight: 900; padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); color: var(--soft); }
+.lb-row.on { box-shadow: 0 0 0 2px var(--yellow) inset; }
+.lb-row.on i { background: var(--yellow); color: var(--board-deep); }
+.tk-online { margin: 0 0 10px; padding: 9px 11px; border-radius: 8px; background: rgba(29, 35, 80, 0.07); font-size: 14px; font-weight: 700; }
+.tk-online small { display: block; margin-top: 3px; font-size: 12px; color: #5a5f8a; }
+.tk-online.crown { background: #fff1b8; }
+.tk-online.err { background: #ffe0e0; color: #8a1f1f; }

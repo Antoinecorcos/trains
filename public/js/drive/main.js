@@ -1,10 +1,11 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
 import { MISSIONS, dailyMission, STATIONS, PLATFORM } from './route.js';
 import {
-  DT, createRun, step, computeSchedule, aiInput, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt,
+  DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
+import { api } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -32,11 +33,17 @@ let hornEdge = false;
 let hornHeld = false;
 let closeReq = false;
 let toastTimer = 0;
+let runLog = null;
+let ghostChoice = null; // { type: 'titulaire' | 'me' | 'player', pseudo }
+let starting = false;
 const schedCache = {};
 const tips = store.get('ukipu.drive.tips', {});
 
 const allMissions = () => [...MISSIONS, dailyMission()];
-const progress = () => store.get('ukipu.drive.progress.v2', {});
+const progKey = () => (api.loggedIn ? `ukipu.drive.progress.u.${api.user.pseudo.toLowerCase()}` : 'ukipu.drive.progress.v2');
+const ghostKey = (id) => (api.loggedIn ? `ukipu.drive.ghost.u.${api.user.pseudo.toLowerCase()}.${id}` : `ukipu.drive.ghost.v2.${id}`);
+const progress = () => store.get(progKey(), {});
+const syncProgress = () => { if (api.loggedIn && api.progress) store.set(progKey(), api.progress); };
 const totalStars = () => Object.entries(progress()).filter(([id]) => !id.startsWith('daily')).reduce((s, [, p]) => s + (p.stars || 0), 0);
 const unlocked = (m) => totalStars() >= m.need || (m.daily && Object.keys(progress()).some((id) => !id.startsWith('daily')));
 const fmtClock = (t, sec = true) => {
@@ -78,6 +85,115 @@ function showBoard() {
   const t = totalStars();
   $('stars-total').textContent = t ? `${t} ★ gagnées sur la ligne U` : 'Commence par « Premiers pas ».';
   $('screen-start').hidden = false;
+  renderAccount();
+  renderFeed();
+}
+
+// ---------------------------------------------------------------------------
+// Compte, fil d'actu, classement général
+// ---------------------------------------------------------------------------
+
+function renderAccount() {
+  const el = $('account');
+  if (!api.online) {
+    el.innerHTML = `
+      <label class="row row-input" for="pseudo">
+        <span class="row-time small">Agent</span>
+        <input id="pseudo" type="text" maxlength="16" autocomplete="nickname" placeholder="Ton pseudo" value="${esc(store.get('ukipu.pseudo', ''))}">
+      </label>
+      <p class="acc-note">Hors ligne : tes parties restent sur cet appareil, sans classement.</p>`;
+    return;
+  }
+  if (api.loggedIn) {
+    el.innerHTML = `
+      <div class="row acc-row">
+        <span class="row-time small">Agent</span>
+        <span class="row-mid"><span class="row-dest">${esc(api.user.pseudo)}</span><span class="row-type">Tes parties comptent au classement</span></span>
+        <span class="acc-btns">
+          <button class="pill pill-ok" type="button" id="btn-ranking">Classement</button>
+          <button class="pill pill-off" type="button" id="btn-logout">Déconnexion</button>
+        </span>
+      </div>`;
+    $('btn-ranking').onclick = showRanking;
+    $('btn-logout').onclick = async () => { await api.logout(); showBoard(); };
+    return;
+  }
+  el.innerHTML = `
+    <form class="acc-form" id="acc-form" autocomplete="on">
+      <p class="acc-title">Connecte-toi pour entrer au classement et rouler contre tes potes.</p>
+      <div class="acc-fields">
+        <input id="acc-pseudo" type="text" maxlength="16" autocomplete="username" placeholder="Pseudo" value="${esc(store.get('ukipu.pseudo', ''))}">
+        <input id="acc-pass" type="password" autocomplete="current-password" placeholder="Mot de passe">
+      </div>
+      <div class="acc-actions">
+        <button class="big-btn small" type="submit">Connexion</button>
+        <button class="ghost-btn small" type="button" id="btn-register">Créer mon compte</button>
+      </div>
+      <p class="acc-err" id="acc-err" role="alert"></p>
+    </form>
+    <button class="row row-plain" type="button" id="btn-ranking"><span class="row-mid"><span class="row-dest" style="font-size:16px">Voir le classement général ›</span></span></button>`;
+  const go = async (mode) => {
+    const pseudo = $('acc-pseudo').value.trim();
+    const pass = $('acc-pass').value;
+    $('acc-err').textContent = '';
+    try {
+      if (mode === 'register') await api.register(pseudo, pass); else await api.login(pseudo, pass);
+      store.set('ukipu.pseudo', api.user.pseudo);
+      syncProgress();
+      toast(mode === 'register' ? `Bienvenue ${api.user.pseudo} !` : `Bon retour ${api.user.pseudo}`);
+      showBoard();
+    } catch (e) {
+      $('acc-err').textContent = e.message;
+    }
+  };
+  $('acc-form').onsubmit = (e) => { e.preventDefault(); go('login'); };
+  $('btn-register').onclick = () => go('register');
+  $('btn-ranking').onclick = showRanking;
+}
+
+const ago = (at) => {
+  const m = Math.round((Date.now() - at) / 60000);
+  if (m < 1) return 'à l\'instant';
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `il y a ${h} h`;
+  return `il y a ${Math.round(h / 24)} j`;
+};
+
+async function renderFeed() {
+  const el = $('feed');
+  if (!api.online) { el.hidden = true; return; }
+  try {
+    const { events } = await api.feed();
+    if (!events.length) { el.hidden = true; return; }
+    el.innerHTML = `<p class="feed-title">Fil d'actu</p>${events.slice(0, 6).map((e) => `
+      <div class="feed-item ${e.kind}"><span>${esc(e.text)}</span><small>${ago(e.at)}</small></div>`).join('')}`;
+    el.hidden = false;
+  } catch { el.hidden = true; }
+}
+
+async function showRanking() {
+  $('screen-start').hidden = true;
+  $('screen-ranking').hidden = false;
+  const el = $('ranking');
+  el.innerHTML = '<div class="board-head"><h2 class="board-title" style="font-size:28px">Classement</h2></div><p class="note-row">Chargement…</p>';
+  let rows = '';
+  try {
+    const { players } = await api.ranking();
+    rows = players.length ? players.map((p) => `
+      <div class="row rk-row${api.user && p.pseudo === api.user.pseudo ? ' me' : ''}">
+        <span class="row-time">${p.rank}</span>
+        <span class="row-mid"><span class="row-dest">${esc(p.pseudo)}${p.crowns ? ` <span class="crowns">👑×${p.crowns}</span>` : ''}</span><span class="row-type">${p.missions} mission${p.missions > 1 ? 's' : ''} · ${fr0.format(p.score)} pts</span></span>
+        <span class="row-stars">${p.stars} ★</span>
+      </div>`).join('') : '<p class="note-row">Personne n\'a encore roulé. À toi l\'honneur.</p>';
+  } catch (e) {
+    rows = `<p class="note-row">${esc(e.message)}</p>`;
+  }
+  el.innerHTML = `
+    <div class="board-head"><div><p class="board-sub">Ligne U · toutes missions</p><h2 class="board-title" style="font-size:28px">Classement</h2></div></div>
+    ${rows}
+    <div class="brief-actions" style="padding-top:12px"><button class="ghost-btn" type="button" id="btn-rk-back">Retour aux départs</button></div>`;
+  $('btn-rk-back').onclick = () => { $('screen-ranking').hidden = true; showBoard(); };
 }
 
 function showBrief(m) {
@@ -105,7 +221,8 @@ function showBrief(m) {
       <p class="brief-blurb">${m.blurb}</p>
       <div class="brief-stops">${all.map((k) => `<span class="${stops.includes(k) ? '' : 'pass'}">${STATIONS[k].name}</span>`).join('')}</div>
       <div class="brief-cond">${cond.join('')}</div>
-      <div class="brief-best">${p ? `Ton record : ${fr0.format(p.score)} pts · ${'★'.repeat(p.stars)} · fantôme disponible` : 'Pas encore de record : le fantôme du conducteur titulaire roulera avec toi.'}</div>
+      <div class="brief-best">${p ? `Ton record : ${fr0.format(p.score)} pts · ${'★'.repeat(p.stars)}` : 'Pas encore de record sur cette mission.'}</div>
+      <div class="brief-lb" id="brief-lb"></div>
     </div>
     <div class="brief-actions">
       <button class="big-btn" type="button" id="btn-go">Prendre les commandes</button>
@@ -115,23 +232,61 @@ function showBrief(m) {
   $('screen-brief').hidden = false;
   $('btn-go').onclick = () => startMission(m);
   $('btn-back').onclick = () => { $('screen-brief').hidden = true; showBoard(); };
+  const hasLocal = !!store.get(ghostKey(m.id), null) || (api.loggedIn && p);
+  ghostChoice = hasLocal ? { type: 'me' } : { type: 'titulaire' };
+  renderGhostChoice(m, null);
+  if (api.online) {
+    api.leaderboard(m.id).then((lb) => {
+      const leader = lb.top[0];
+      if (leader && (!api.user || leader.pseudo !== api.user.pseudo)) ghostChoice = { type: 'player', pseudo: leader.pseudo };
+      renderGhostChoice(m, lb);
+    }).catch(() => {});
+  }
+}
+
+function renderGhostChoice(m, lb) {
+  const el = $('brief-lb');
+  if (!el) return;
+  const hasMe = !!store.get(ghostKey(m.id), null) || (api.loggedIn && progress()[m.id]);
+  const opt = (type, pseudo, label, sub) => {
+    const on = ghostChoice.type === type && (type !== 'player' || ghostChoice.pseudo === pseudo);
+    return `<button class="lb-row${on ? ' on' : ''}" type="button" data-gt="${type}" data-gp="${esc(pseudo ?? '')}">${label}<small>${sub}</small><i>${on ? 'Fantôme ✓' : 'Fantôme'}</i></button>`;
+  };
+  let html = '<p class="feed-title">Rouler contre</p>';
+  if (lb && lb.top.length) {
+    html += lb.top.slice(0, 5).map((r) => opt('player', r.pseudo, `<b>${r.rank === 1 ? '👑' : `${r.rank}.`} ${esc(r.pseudo)}</b>`, `${fr0.format(r.score)} pts · ${'★'.repeat(r.stars)}`)).join('');
+    if (lb.mine && lb.mine.rank > 5) html += `<p class="acc-note">Toi : ${lb.mine.rank}e · ${fr0.format(lb.mine.score)} pts</p>`;
+  }
+  if (hasMe && !(lb && lb.top.some((r) => api.user && r.pseudo === api.user.pseudo && r.rank <= 5))) html += opt('me', null, '<b>Ton record</b>', 'Ton meilleur passage');
+  html += opt('titulaire', null, '<b>Le titulaire</b>', 'Conducteur de référence');
+  el.innerHTML = html;
+  el.onclick = (e) => {
+    const b = e.target.closest('[data-gt]');
+    if (!b) return;
+    const type = b.dataset.gt;
+    const pseudo = b.dataset.gp;
+    ghostChoice = type === 'player' && api.user && pseudo === api.user.pseudo ? { type: 'me' } : { type, pseudo };
+    renderGhostChoice(m, lb);
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Lancement d'une mission
 // ---------------------------------------------------------------------------
 
-function startMission(m) {
+async function startMission(m) {
+  if (starting) return;
+  starting = true;
   audio.start();
-  store.set('ukipu.pseudo', $('pseudo').value.trim());
+  const ps = $('pseudo');
+  if (ps) store.set('ukipu.pseudo', ps.value.trim());
   mission = m;
   if (!schedCache[m.id]) schedCache[m.id] = computeSchedule(m);
   sched = schedCache[m.id];
+  ghost = await loadGhost(m);
+  starting = false;
   run = createRun(m, { sched });
-  const pb = progress()[m.id];
-  const pbFrames = store.get(`ukipu.drive.ghost.v2.${m.id}`, null);
-  ghost = pbFrames ? { frames: pbFrames, label: 'Ton record' } : { frames: sched.frames, label: 'Titulaire' };
-  void pb;
+  runLog = newLog();
   lever = 0;
   acc = 0;
   hornEdge = false;
@@ -146,6 +301,26 @@ function startMission(m) {
   paused = false;
   if (m.tutorial) tip('start', 'Pousse le manipulateur (à droite) vers le haut pour démarrer.', true);
   else toast(`${m.title} · ${run.m.stops.length} arrêts`);
+}
+
+async function loadGhost(m) {
+  const choice = ghostChoice ?? { type: 'titulaire' };
+  const titulaire = { frames: sched.frames, label: 'Titulaire' };
+  try {
+    if (choice.type === 'player' && api.online) {
+      const g = await api.ghost(m.id, choice.pseudo);
+      return { frames: g.frames, label: g.pseudo };
+    }
+    if (choice.type === 'me') {
+      const local = store.get(ghostKey(m.id), null);
+      if (local) return { frames: local, label: 'Ton record' };
+      if (api.loggedIn) {
+        const g = await api.ghost(m.id, api.user.pseudo);
+        return { frames: g.frames, label: 'Ton record' };
+      }
+    }
+  } catch { /* fantôme indisponible : on roule avec le titulaire */ }
+  return titulaire;
 }
 
 function buildStrip() {
@@ -167,7 +342,9 @@ function frame(ts) {
   if (run && running && !paused && !run.over) {
     acc += dt * SPEED;
     while (acc >= DT && !run.over) {
-      step(run, { lever, horn: hornEdge, close: closeReq });
+      const input = { lever, horn: hornEdge, close: closeReq };
+      record(runLog, input);
+      step(run, input);
       hornEdge = false;
       closeReq = false;
       acc -= DT;
@@ -533,7 +710,7 @@ function drawSpeedo(r) {
 
 function setLever(v) {
   const prev = lever;
-  lever = Math.max(-1, Math.min(1, Math.abs(v) < 0.07 ? 0 : v));
+  lever = Math.round(Math.max(-1, Math.min(1, Math.abs(v) < 0.07 ? 0 : v)) * 100) / 100;
   if ((prev === 0) !== (lever === 0) || (prev > -0.92) !== (lever > -0.92)) { audio.click(); navigator.vibrate?.(8); }
   const el = $('lever');
   const knob = $('lever-knob');
@@ -635,11 +812,11 @@ function showEnd() {
   const isBest = !prev || res.score > prev.score;
   if (isBest) {
     prog[mission.id] = { score: res.score, stars: Math.max(res.stars, prev?.stars ?? 0), at: Date.now() };
-    store.set(`ukipu.drive.ghost.v2.${mission.id}`, run.frames);
+    store.set(ghostKey(mission.id), run.frames);
   } else if (res.stars > prev.stars) prog[mission.id].stars = res.stars;
-  store.set('ukipu.drive.progress.v2', prog);
+  store.set(progKey(), prog);
 
-  const pseudo = store.get('ukipu.pseudo', '') || 'Un conducteur';
+  const pseudo = api.user?.pseudo || store.get('ukipu.pseudo', '') || 'Un conducteur';
   const title = res.stars === 3 ? 'Conduite de maître' : res.stars === 2 ? 'Belle conduite' : 'Arrivé à bon port';
   const gradeLbl = { parfait: 'PARFAIT', super: 'SUPER', bien: 'BIEN', ok: 'OK', loin: 'LOIN', rate: 'RATÉ' };
   const line = (k, v) => `<div class="tk-line"><span>${k}</span><span class="dots"></span><b>${v}</b></div>`;
@@ -662,13 +839,35 @@ function showEnd() {
       ${line('Pénalités', fr0.format(Math.round(res.parts.penalty)))}
       ${line('Comparaison', vsPrev)}
     </div>
-    <div class="tk-feed">${res.stars === 3 ? '👑 ' : ''}<b>${esc(pseudo)}</b> a conduit « ${mission.title} » : ${fr0.format(res.score)} pts.</div>
+    <div class="tk-online" id="tk-online">${api.loggedIn ? 'Envoi au classement…' : api.online ? 'Connecte-toi pour entrer au classement.' : 'Hors ligne : partie gardée sur cet appareil.'}</div>
+    <div class="tk-feed"><b>${esc(pseudo)}</b> a conduit « ${mission.title} » : ${fr0.format(res.score)} pts.</div>
     <div class="stamp">Composté<span class="stars">${'★'.repeat(res.stars)}${'☆'.repeat(3 - res.stars)}</span>${today}</div>`;
   $('copy-fallback').hidden = true;
   const list = allMissions();
   const i = list.findIndex((m) => m.id === mission.id);
   $('btn-next').disabled = !list.slice(i + 1).some((m) => unlocked(m));
   $('screen-end').hidden = false;
+  if (api.loggedIn) sendRun(mission, runLog);
+}
+
+async function sendRun(m, log) {
+  const el = $('tk-online');
+  try {
+    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c });
+    let html;
+    if (r.crown && r.dethroned) html = `👑 <b>Tu prends la tête</b> et tu détrônes <b>${esc(r.dethroned)}</b> !`;
+    else if (r.crown) html = r.players > 1 ? '👑 <b>Tu gardes la tête</b> du classement.' : '👑 <b>Premier au classement</b> de cette mission.';
+    else html = `Classement : <b>${r.rank}<sup>e</sup></b> sur ${r.players}${r.best ? ' · nouveau record perso' : ''}`;
+    if (r.score !== run?.result?.score) html += `<small>Score vérifié par le serveur : ${fr0.format(r.score)} pts</small>`;
+    el.innerHTML = html;
+    el.classList.add(r.crown ? 'crown' : 'ok');
+    await api.refresh();
+    syncProgress();
+    if (r.crown) { audio.perfect(); }
+  } catch (e) {
+    el.textContent = `Envoi impossible : ${e.message}`;
+    el.classList.add('err');
+  }
 }
 
 async function copyResult() {
@@ -701,11 +900,14 @@ function range(a, b) {
 function boot() {
   world = new World($('world'));
   new ResizeObserver(() => world.resize()).observe($('world-wrap'));
-  $('pseudo').value = store.get('ukipu.pseudo', '');
   bindLever();
   bindButtons();
   showBoard();
   requestAnimationFrame(frame);
+  api.init().then(() => {
+    syncProgress();
+    if (!$('screen-start').hidden) showBoard();
+  });
 }
 
 boot();

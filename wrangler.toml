@@ -1,0 +1,14 @@
+# Configuration Cloudflare : un Worker qui sert le jeu (fichiers statiques) et l'API /api/*.
+name = "ukipu"
+main = "server/worker.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ukipu"
+# Remplacer par l'identifiant de la base D1 créée dans le tableau de bord Cloudflare
+database_id = "00000000-0000-0000-0000-000000000000"

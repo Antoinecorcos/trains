@@ -453,3 +453,30 @@ export function computeSchedule(mission) {
   const dep = arr.map((t, i) => t + 3 + (r.m.stops[i].pax / 16));
   return { arr, dep, frames: r.frames, aiTime: r.t, aiScore: Math.round(r.score) };
 }
+
+// ---------------------------------------------------------------------------
+// Journal des commandes : permet au serveur de rejouer la partie et de recalculer le score
+// ---------------------------------------------------------------------------
+
+export const newLog = () => ({ n: 0, l: [], h: [], c: [], last: 0 });
+
+export function record(log, input) {
+  if (input.lever !== log.last) { log.l.push([log.n, input.lever]); log.last = input.lever; }
+  if (input.horn) log.h.push(log.n);
+  if (input.close) log.c.push(log.n);
+  log.n++;
+}
+
+export function replay(mission, sched, log) {
+  const r = createRun(mission, { sched });
+  const horn = new Set(log.h);
+  const close = new Set(log.c);
+  let li = 0;
+  let lever = 0;
+  for (let i = 0; i < log.n && !r.over; i++) {
+    while (li < log.l.length && log.l[li][0] === i) { lever = log.l[li][1]; li++; }
+    step(r, { lever, horn: horn.has(i), close: close.has(i) });
+    r.events.length = 0;
+  }
+  return r;
+}

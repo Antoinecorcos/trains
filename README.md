@@ -16,14 +16,24 @@ Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 4 à 6 arrêts (env
 - **Fantôme** : le conducteur titulaire, puis ton propre record, roulent avec toi.
 - **Progression** : 5 missions débloquées par les étoiles + un défi du jour identique pour tout le monde.
 
-Le mode régulation (V0.2) reste jouable via `regulation.html`.
+Le mode régulation (V0.2) reste jouable via `public/regulation.html`.
+
+## V0.4 — en ligne
+
+- **Comptes** (pseudo + mot de passe), **classement par mission**, **classement général** (étoiles, couronnes).
+- **Le serveur fait foi** : chaque partie est envoyée sous forme de journal des commandes et **rejouée** par le serveur, qui recalcule le score. Impossible d'envoyer un faux score.
+- **Fantômes des potes** : avant chaque mission, on choisit contre qui rouler (le leader 👑 par défaut, un pote, son record ou le titulaire).
+- **Fil d'actu** : couronnes prises et perdues, 3 étoiles, sans-faute… et les sangliers percutés.
+- Sans serveur (fichiers locaux, page de démonstration), le jeu reste jouable hors ligne.
+
+Mise en ligne : voir [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md).
 
 ## Lancer en local
 
 Aucune installation : ce sont des fichiers statiques.
 
 ```bash
-python3 -m http.server 8000
+python3 -m http.server 8000 --directory public
 ```
 
 Puis ouvrir http://localhost:8000. Ajouter `?vitesse=4` à l'adresse pour accélérer une partie de test.
@@ -50,14 +60,17 @@ node tools/headless.js 30 bot
 
 | Fichier | Rôle |
 |---|---|
-| `index.html`, `css/drive.css` | Mode conduite (PWA, iPhone et PC) |
-| `js/drive/route.js` | Tracé de la U, missions, aléas, défi du jour |
-| `js/drive/sim.js` | Physique et règles de conduite déterministes, conducteur titulaire (IA) |
-| `js/drive/world.js` | Vue de côté : décors en parallaxe, quais, Z 2N |
-| `js/drive/main.js`, `js/drive/audio.js` | Pupitre, écrans, sons synthétisés |
-| `regulation.html`, `css/style.css` | Ancien mode régulation |
-| `js/data.js` | Ligne U, personnel, incidents, scénario |
-| `js/sim.js` | Simulation déterministe — réutilisable côté serveur pour rejouer une partie |
-| `js/render.js` | Dessin du TCO (schéma de ligne) sur Canvas |
-| `js/main.js` | Boucle de jeu, panneaux, écrans |
+| `public/index.html`, `public/css/drive.css` | Mode conduite (PWA, iPhone et PC) |
+| `public/js/drive/route.js` | Tracé de la U, missions, aléas, défi du jour |
+| `public/js/drive/sim.js` | Physique et règles de conduite déterministes, conducteur titulaire (IA) |
+| `public/js/drive/world.js` | Vue de côté : décors en parallaxe, quais, Z 2N |
+| `public/js/drive/main.js`, `public/js/drive/audio.js` | Pupitre, écrans, sons synthétisés |
+| `public/js/drive/api.js` | Accès au serveur (comptes, parties, classements, fantômes) |
+| `server/worker.js`, `wrangler.toml` | Serveur Cloudflare (Worker + D1) |
+| `public/regulation.html`, `public/css/style.css` | Ancien mode régulation |
+| `public/js/data.js` | Ligne U, personnel, incidents, scénario |
+| `public/js/sim.js` | Simulation déterministe — réutilisable côté serveur pour rejouer une partie |
+| `public/js/render.js` | Dessin du TCO (schéma de ligne) sur Canvas |
+| `public/js/main.js` | Boucle de jeu, panneaux, écrans |
 | `tools/headless.js` | Simulations sans affichage pour l'équilibrage |
+| `tools/drive-test.js`, `tools/api-test.js` | Tests du mode conduite et de l'API |

@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sim": "node tools/headless.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "sim": "node tools/headless.js",
+    "drive-test": "node tools/drive-test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
   }
 }
