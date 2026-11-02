@@ -10,5 +10,5 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "ukipu"
-# Remplacer par l'identifiant de la base D1 créée dans le tableau de bord Cloudflare
-database_id = "00000000-0000-0000-0000-000000000000"
+# Base D1 « ukipu » du compte Cloudflare
+database_id = "98d26ab7-8dcc-4233-96b5-349922ed5d47"
