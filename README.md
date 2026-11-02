@@ -4,14 +4,15 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
-## V0 — prototype
+## V0.2 — prototype
 
-Un service de 5 minutes sur la ligne U (Lundi, heure de pointe, 06:30 → 09:30), sans serveur.
+Un service de 5 minutes sur la ligne U (lundi de pointe, 06:30 → 09:30), sans serveur, dans l'univers des écrans en gare.
 
-- Touchez un **incident** (losange jaune) pour y envoyer un agent : le spécialiste est bien plus rapide.
-- Touchez un **train** pour le réguler : le retenir à quai, le passer en direct, le limiter (terminus partiel), le supprimer.
-- **Réserve** : injecter une rame supplémentaire. **Annonce** : calmer les voyageurs pendant 5 min.
-- Un poste d'aiguillage tombe en panne pendant le service : il faut autoriser les départs de Versailles-Chantiers un par un.
+- **Incidents** (carré orange) : chacun propose plusieurs réponses — le spécialiste, un autre agent, ou une solution alternative avec sa contrepartie (voie unique, évacuation, marche à vue…).
+- **Trains** : touchez-les pour les retenir, les passer en direct, leur faire faire demi-tour ou les supprimer. Raccourcis : glisser vers l'avant = direct, vers l'arrière = demi-tour.
+- **Dilemmes** : journaliste à bord, conducteur volontaire, visite du directeur, rame neuve, la N qui demande le passage… 14 secondes pour trancher.
+- **Séries** : enchaîner les trains à l'heure débloque des bonus (agents disponibles, applaudissements).
+- **Poste de Versailles en panne** : touchez « GO » sur chaque train, un à la fois.
 - Score : régularité (trains arrivés au terminus avec moins de 5 min de retard). Si la satisfaction tombe à zéro, le service est interrompu.
 
 ## Lancer en local

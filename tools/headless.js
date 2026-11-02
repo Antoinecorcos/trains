@@ -15,6 +15,7 @@ function bot(g) {
   for (const tr of g.trains) {
     if (tr.waitingAuth && g.t >= g.node.busyUntil) apply(g, { type: 'authorize', trainId: tr.id });
   }
+  if (g.dilemma) apply(g, { type: 'choose', choiceId: g.dilemma.choices[0].id });
   if (g.sat < 80) apply(g, { type: 'annonce' });
   for (const r of g.reserves) if (!r.used && g.t > 7 * 3600 + 30 * 60) apply(g, { type: 'reserve', reserveId: r.id });
 }
@@ -26,7 +27,7 @@ for (let i = 0; i < runs; i++) {
   let maxLoad = 0;
   while (!g.over) {
     step(g);
-    if (policy === 'bot' && g.t % 20 === 0) bot(g);
+    if (policy === 'bot' && g.t % 150 === 0) bot(g);
     g.events.length = 0;
     for (const tr of g.trains) maxLoad = Math.max(maxLoad, tr.load);
   }
@@ -35,4 +36,4 @@ for (let i = 0; i < runs; i++) {
 const avg = (k) => (res.reduce((s, r) => s + r[k], 0) / res.length).toFixed(1);
 console.log(`policy=${policy} runs=${runs}`);
 console.log(`regularity=${avg('regularity')} sat=${avg('satisfaction')} stars=${avg('stars')} failed=${res.filter((r) => r.failed).length} counted=${avg('counted')} suppressed=${avg('suppressed')} transported=${avg('transported')} leftBehind=${avg('leftBehind')} maxLoad=${avg('maxLoad')}`);
-for (const r of res.slice(0, 6)) console.log(JSON.stringify({ reg: r.regularity, sat: r.satisfaction, st: r.stars, f: r.failed, c: r.counted, sup: r.suppressed, inc: r.incidents, end: r.endedAt }));
+for (const r of res.slice(0, 6)) console.log(JSON.stringify({ reg: r.regularity, sat: r.satisfaction, st: r.stars, f: r.failed, c: r.counted, sup: r.suppressed, inc: r.incidents, dil: r.dilemmas, won: r.dilemmasWon, streak: r.bestStreak, end: r.endedAt }));
