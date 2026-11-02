@@ -6,7 +6,7 @@ Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
 ## V0.3 — mode conduite
 
-Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 1 min 30 à 2 min 30.
+Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 4 à 6 arrêts (environ 4 à 5 min), et la ligne complète pour les acharnés.
 
 - **Manipulateur** (à droite) : vers le haut = traction, vers le bas = freinage, tout en bas = freinage d'urgence. Au clavier : flèches haut/bas, `0` pour le neutre.
 - **Arrêt précis** : s'arrêter pile sur le repère en bout de quai. PARFAIT (< 0,5 m), SUPER, BIEN, OK… Les arrêts parfaits enchaînés font monter le combo.

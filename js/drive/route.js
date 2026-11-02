@@ -1,6 +1,6 @@
 // Tracé de la ligne U en mode conduite, missions et aléas.
-// Les positions sont en mètres « de jeu » : les distances réelles sont réduites (×0,22)
-// pour qu'une mission dure 1 min 30 à 2 min 30.
+// Les positions sont en mètres « de jeu » : les distances réelles sont réduites (×0,19)
+// pour qu'une mission dure environ 4 à 5 minutes (7 pour la ligne complète).
 
 import { mulberry32 } from '../rng.js';
 
@@ -45,56 +45,71 @@ export const SERIES = {
 
 export const MISSIONS = [
   {
-    id: 'm1', title: 'Premiers pas', from: 0, to: 3, clock: [7, 41], need: 0,
+    id: 'm1', title: 'Premiers pas', from: 0, to: 6, clock: [7, 41], need: 0,
     weather: 'clear', light: 0.55,
-    blurb: 'Trois arrêts courts sous les tours de La Défense. Le bon endroit pour apprendre à freiner.',
+    blurb: 'Six arrêts de La Défense à Versailles-Chantiers. On apprend à freiner sous les tours, puis la forêt arrive.',
     tutorial: true,
     build: (h) => {
       h.limit(1, 2, 0.35, 0.75, 60, 'Courbe');
       h.signal(2, 3, 0.55, 6);
-    },
-  },
-  {
-    id: 'm2', title: 'La traversée des bois', from: 3, to: 6, clock: [7, 52], need: 2,
-    weather: 'clear', light: 0.62,
-    blurb: 'Feuilles mortes dans la forêt et un sanglier qui traîne. Long tronçon jusqu\'à Versailles.',
-    build: (h) => {
-      h.leaves(4, 5, 0.25, 0.7);
-      h.animal(5, 6, 0.4);
-      h.signal(5, 6, 0.8, 7);
+      h.leaves(4, 5, 0.3, 0.7);
+      h.runner(5);
       h.passengers(6, 70);
     },
   },
   {
-    id: 'm3', title: 'Averse sur Saint-Cyr', from: 6, to: 8, clock: [8, 9], need: 4,
+    id: 'm2', title: 'La traversée des bois', from: 2, to: 8, clock: [7, 52], need: 2,
+    weather: 'clear', light: 0.62,
+    blurb: 'De Suresnes à Saint-Quentin : feuilles mortes dans la forêt, un sanglier qui traîne et un train de la N devant.',
+    build: (h) => {
+      h.limit(2, 3, 0.3, 0.7, 80, 'Courbe');
+      h.leaves(4, 5, 0.25, 0.75);
+      h.animal(5, 6, 0.4);
+      h.signal(5, 6, 0.8, 7);
+      h.passengers(6, 70);
+      h.signal(7, 8, 0.5, 7, 'Train de la N devant');
+    },
+  },
+  {
+    id: 'm3', title: 'Averse sur les Yvelines', from: 6, to: 10, clock: [8, 9], need: 4,
     weather: 'rain', light: 0.5,
-    blurb: 'La pluie rend les rails glissants. Un train de la N encombre la voie partagée.',
+    blurb: 'De Versailles à La Verrière sous la pluie : rails glissants, chantier à Trappes et retardataires sur les quais.',
     build: (h) => {
       h.limit(6, 7, 0.2, 0.55, 80, 'Appareils de voie');
       h.signal(7, 8, 0.5, 8, 'Train de la N devant');
       h.runner(8);
-    },
-  },
-  {
-    id: 'm4', title: 'Chantier à Trappes', from: 8, to: 10, clock: [8, 24], need: 6,
-    weather: 'clear', light: 0.85,
-    blurb: 'Des agents travaillent sur la voie : limitation à 40 et coup de klaxon obligatoire.',
-    build: (h) => {
       h.works(8, 9, 0.35, 0.7);
-      h.leaves(9, 10, 0.55, 0.8);
       h.runner(9);
       h.passengers(10, 25);
     },
   },
   {
-    id: 'm5', title: 'Semi-direct', from: 0, to: 6, stops: [3, 6], clock: [7, 33], need: 9,
+    id: 'm4', title: 'Semi-direct', from: 0, to: 10, stops: [3, 6, 8, 10], clock: [7, 33], need: 6,
     weather: 'clear', light: 0.4,
-    blurb: 'Arrêts à Saint-Cloud et Versailles seulement. Ne vous arrêtez surtout pas ailleurs.',
+    blurb: 'Toute la ligne avec quatre arrêts seulement. Ça roule vite. Ne vous arrêtez surtout pas ailleurs.',
     build: (h) => {
       h.limit(1, 2, 0.3, 0.7, 80, 'Courbe');
       h.signal(3, 4, 0.45, 6);
       h.leaves(4, 5, 0.3, 0.9);
       h.animal(5, 6, 0.55);
+      h.works(8, 9, 0.3, 0.6);
+      h.signal(9, 10, 0.6, 6, 'Train de la N devant');
+    },
+  },
+  {
+    id: 'm5', title: 'Le grand tour', from: 0, to: 10, clock: [6, 58], need: 9,
+    weather: 'clear', light: 0.3,
+    blurb: 'La ligne U en entier, les dix arrêts, à l\'aube. Pour les acharnés : huit minutes sans relâcher.',
+    build: (h) => {
+      h.limit(1, 2, 0.35, 0.75, 60, 'Courbe');
+      h.signal(2, 3, 0.55, 6);
+      h.leaves(4, 5, 0.25, 0.75);
+      h.animal(5, 6, 0.45);
+      h.runner(6);
+      h.limit(6, 7, 0.2, 0.55, 80, 'Appareils de voie');
+      h.signal(7, 8, 0.5, 7, 'Train de la N devant');
+      h.works(8, 9, 0.35, 0.7);
+      h.runner(9);
     },
   },
 ];
@@ -103,8 +118,8 @@ export const MISSIONS = [
 export function dailyMission(date = new Date()) {
   const key = Number(`${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`);
   const rng = mulberry32(key);
-  const from = Math.floor(rng() * 7);
-  const len = 2 + Math.floor(rng() * 2);
+  const from = Math.floor(rng() * 5);
+  const len = 5 + Math.floor(rng() * 2);
   const to = Math.min(10, from + len);
   const weather = rng() < 0.4 ? 'rain' : 'clear';
   return {

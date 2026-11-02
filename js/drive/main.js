@@ -36,7 +36,7 @@ const schedCache = {};
 const tips = store.get('ukipu.drive.tips', {});
 
 const allMissions = () => [...MISSIONS, dailyMission()];
-const progress = () => store.get('ukipu.drive.progress', {});
+const progress = () => store.get('ukipu.drive.progress.v2', {});
 const totalStars = () => Object.entries(progress()).filter(([id]) => !id.startsWith('daily')).reduce((s, [, p]) => s + (p.stars || 0), 0);
 const unlocked = (m) => totalStars() >= m.need || (m.daily && Object.keys(progress()).some((id) => !id.startsWith('daily')));
 const fmtClock = (t, sec = true) => {
@@ -129,7 +129,7 @@ function startMission(m) {
   sched = schedCache[m.id];
   run = createRun(m, { sched });
   const pb = progress()[m.id];
-  const pbFrames = store.get(`ukipu.drive.ghost.${m.id}`, null);
+  const pbFrames = store.get(`ukipu.drive.ghost.v2.${m.id}`, null);
   ghost = pbFrames ? { frames: pbFrames, label: 'Ton record' } : { frames: sched.frames, label: 'Titulaire' };
   void pb;
   lever = 0;
@@ -635,9 +635,9 @@ function showEnd() {
   const isBest = !prev || res.score > prev.score;
   if (isBest) {
     prog[mission.id] = { score: res.score, stars: Math.max(res.stars, prev?.stars ?? 0), at: Date.now() };
-    store.set(`ukipu.drive.ghost.${mission.id}`, run.frames);
+    store.set(`ukipu.drive.ghost.v2.${mission.id}`, run.frames);
   } else if (res.stars > prev.stars) prog[mission.id].stars = res.stars;
-  store.set('ukipu.drive.progress', prog);
+  store.set('ukipu.drive.progress.v2', prog);
 
   const pseudo = store.get('ukipu.pseudo', '') || 'Un conducteur';
   const title = res.stars === 3 ? 'Conduite de maître' : res.stars === 2 ? 'Belle conduite' : 'Arrivé à bon port';

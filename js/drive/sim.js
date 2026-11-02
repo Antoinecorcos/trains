@@ -385,7 +385,9 @@ function finish(r) {
 
 export function result(r) {
   const n = r.m.stops.length;
-  const ref = n * (500 + 300 + 150) + 300 + 100 * (r.m.animals.length + r.m.works.length);
+  // Score de référence : arrêts parfaits enchaînés (combo compris), ponctualité et portes parfaites
+  let ref = 300 + 100 * (r.m.animals.length + r.m.works.length);
+  for (let i = 0; i < n; i++) ref += 500 * (i >= 1 ? 1 + 0.25 * Math.min(i, 6) : 1) + 300 + (i < n - 1 ? 150 : 0);
   const score = Math.round(r.score);
   const stars = 1 + (score >= ref * 0.55 ? 1 : 0) + (score >= ref * 0.8 ? 1 : 0);
   return {
