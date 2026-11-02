@@ -2,6 +2,8 @@
 
 *Régulation Île-de-France.* Tu hérites de la ligne U, à toi de la tenir.
 
+**Jouer : https://ukipu.antiprod.workers.dev** (sur iPhone : Safari → Partager → Sur l'écran d'accueil).
+
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
 ## V0.3 — mode conduite

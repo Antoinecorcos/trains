@@ -1,5 +1,7 @@
 # Mettre Ukipu en ligne (Cloudflare)
 
+**Adresse actuelle : https://ukipu.antiprod.workers.dev** (Worker `ukipu`, sous-domaine `antiprod`).
+
 Le jeu et le serveur tournent sur **un seul Worker Cloudflare** : il sert les fichiers du jeu
 et répond à l'API `/api/*`. Les données (comptes, records, fantômes, fil d'actu) sont dans une
 base **D1** (SQLite). À l'échelle d'une cinquantaine de joueurs, l'offre gratuite suffit.
@@ -28,11 +30,18 @@ Les tables sont créées automatiquement au premier appel du serveur : rien à f
 3. Réglages :
    - Nom du projet : `ukipu` (doit être identique au `name` de `wrangler.toml`).
    - Branche de production : `claude/train-network-game-design-56cuok` (tant que c'est la seule branche).
-   - Commande de build : laisser vide.
+   - Commande de build : **laisser vide** (ne pas y mettre le nom de la branche, sinon le build échoue avec « not found »).
    - Commande de déploiement : `npx wrangler deploy`.
 4. Lance le déploiement. L'adresse du jeu ressemble à `https://ukipu.<ton-sous-domaine>.workers.dev`.
 
 Vérification : `https://ukipu.<ton-sous-domaine>.workers.dev/api/health` doit répondre `{"ok":true,…}`.
+
+## Changer l'adresse
+
+- Sous-domaine gratuit : **Workers & Pages → Sous-domaine → Modifier** (s'applique à tous les Workers du compte).
+- Nom de domaine à soi : sur le Worker `ukipu`, **Paramètres → Domaines et routes → Ajouter → Domaine personnalisé**.
+
+Les comptes et records sont sur le serveur : changer d'adresse ne fait rien perdre.
 
 ## 4. Sur iPhone
 
