@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ukipu</title>
+<meta name="theme-color" content="#0d1219">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ukipu">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="hud-clock">
+      <span class="label">PCC · Ligne U</span>
+      <span id="clock" class="mono">06:30</span>
+    </div>
+    <div class="hud-metric" id="m-reg">
+      <span class="label">Régularité</span>
+      <span class="value mono" id="reg">100,0 %</span>
+    </div>
+    <div class="hud-metric" id="m-sat">
+      <span class="label">Satisfaction</span>
+      <div class="gauge"><div class="gauge-fill" id="sat-fill"></div></div>
+    </div>
+    <button id="btn-pause" class="icon-btn" type="button" aria-label="Pause">❚❚</button>
+    <div class="hud-progress"><div id="progress-fill"></div></div>
+  </header>
+
+  <section id="info">
+    <div id="banner" class="banner"><span class="banner-tag">Info trafic</span><span id="banner-text">Prise de service. Bonne journée.</span></div>
+    <div id="chatter" class="chatter"></div>
+  </section>
+
+  <main id="stage">
+    <canvas id="tco" aria-label="Schéma de la ligne U"></canvas>
+    <div id="toast" class="toast" hidden></div>
+  </main>
+
+  <section id="sheet" class="sheet" hidden></section>
+
+  <footer id="dock">
+    <div id="crew" class="crew"></div>
+    <div class="globals">
+      <button id="btn-reserve" class="gbtn" type="button"><span class="gbtn-k">Réserve</span><span class="gbtn-v mono" id="reserve-count">2</span></button>
+      <button id="btn-annonce" class="gbtn" type="button"><span class="gbtn-k">Annonce</span><span class="gbtn-v" id="annonce-state">Prête</span></button>
+    </div>
+  </footer>
+
+  <div id="screen-start" class="screen">
+    <div class="screen-card">
+      <div class="brand">
+        <div class="brand-pict">U</div>
+        <div>
+          <h1>Ukipu</h1>
+          <p class="brand-sub">Régulation Île-de-France</p>
+        </div>
+      </div>
+      <div class="brief">
+        <p class="brief-k">Prise de service</p>
+        <p class="brief-title">Lundi, heure de pointe</p>
+        <p class="brief-meta mono">La Défense ↔ La Verrière · 06:30 – 09:30 · 8 rames Z 2N</p>
+      </div>
+      <ul class="rules">
+        <li><b>Touchez un incident</b> pour y envoyer un agent. Le bon spécialiste règle le problème bien plus vite.</li>
+        <li><b>Touchez un train</b> pour le réguler : le retenir, le passer en direct, le limiter, le supprimer. Ça sauve la régularité, mais les voyageurs râlent.</li>
+        <li><b>Un train est à l'heure</b> s'il arrive au terminus avec moins de 5 min de retard. Si la satisfaction tombe à zéro, le service est interrompu.</li>
+      </ul>
+      <div class="stars-goal mono">★ service terminé · ★★ ≥ 85 % · ★★★ ≥ 95 %</div>
+      <label class="field" for="pseudo">Pseudo
+        <input id="pseudo" type="text" maxlength="16" autocomplete="nickname" placeholder="Votre pseudo">
+      </label>
+      <button id="btn-start" class="cta" type="button">Prendre le service</button>
+      <p id="best" class="best mono"></p>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen" hidden>
+    <div class="screen-card narrow">
+      <h2>Service en pause</h2>
+      <button id="btn-resume" class="cta" type="button">Reprendre</button>
+      <button id="btn-quit" class="ghost" type="button">Abandonner le service</button>
+    </div>
+  </div>
+
+  <div id="screen-end" class="screen" hidden>
+    <div class="screen-card">
+      <p class="end-k" id="end-k">Fin de service</p>
+      <h2 id="end-title">Service terminé</h2>
+      <div class="end-stars" id="end-stars"></div>
+      <dl class="end-stats" id="end-stats"></dl>
+      <div class="feed-preview" id="end-feed"></div>
+      <div class="end-actions">
+        <button id="btn-again" class="cta" type="button">Reprendre un service</button>
+        <button id="btn-copy" class="ghost" type="button">Copier le résultat</button>
+      </div>
+      <textarea id="copy-fallback" class="copy-fallback" readonly hidden></textarea>
+    </div>
+  </div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

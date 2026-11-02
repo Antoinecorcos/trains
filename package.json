@@ -1,0 +1,8 @@
+{
+  "name": "ukipu",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sim": "node tools/headless.js"
+  }
+}
