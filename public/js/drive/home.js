@@ -122,7 +122,7 @@ async function onHomeClick(e) {
   else if (a === 'account') openAccountModal();
   else if (a === 'modal-close') $('mh-modal').hidden = true;
   else if (a === 'line-sheet') showLineSheet(t.dataset.id);
-  else if (a === 'sheet-close') $('mh-sheet').hidden = true;
+  else if (a === 'sheet-close') { $('mh-sheet').hidden = true; netmap?.select(null); }
   else if (a === 'zoom-in') netmap?.zoom(1.35);
   else if (a === 'zoom-out') netmap?.zoom(1 / 1.35);
   else if (a === 'zoom-fit') netmap?.fit();
@@ -154,6 +154,7 @@ function renderReseau(body) {
         <button type="button" data-act="zoom-fit" aria-label="Recentrer">⤢</button>
       </div>
       ${hasGift ? `<button class="mh-gift" type="button" data-act="daily"><span>🎁</span><small>Jour ${giftDay}/7</small></button>` : ''}
+      ${dailyCard('on-map')}
       <div class="mh-legend">${Object.values(LINES).map((l) => `<button type="button" data-act="${lineOpen(l.id) ? 'line-sheet' : 'locked'}" data-id="${l.id}" data-why="${esc(lineOpen(l.id) ? '' : `${LINE_UNLOCK[l.id].stars} ★ sur la ${LINES[LINE_UNLOCK[l.id].line].name} pour débloquer`)}" class="${lineOpen(l.id) ? '' : 'locked'}">${pict(l.id, 'pict-sm')}</button>`).join('')}</div>
       <div class="mh-sheet" id="mh-sheet" hidden></div>
       <div class="mh-tip" id="mh-tip" hidden></div>
@@ -218,6 +219,23 @@ function showStationTip(name, x, y) {
   tip.hidden = false;
 }
 
+// Carte « Défi du jour » : détachée des lignes, avec le pictogramme de SA ligne
+function dailyCard(cls = '') {
+  const m = dailyMission();
+  const l = lineOf(m);
+  const p = C.progress()[m.id];
+  const wx = { rain: 'Pluie', snow: 'Neige' }[m.weather] ?? (m.light < 0.2 ? 'Nuit' : 'Temps sec');
+  const n = m.stops ? m.stops.length : Math.abs(m.to - m.from);
+  const res = p ? `<span class="dc-stars">${'★'.repeat(p.stars)}<span class="off">${'★'.repeat(3 - p.stars)}</span></span><small>${fr0.format(p.score)} pts</small>` : '<span class="dc-go">Jouer ›</span>';
+  return `
+    <button class="daily-card ${cls}" type="button" data-act="mission" data-id="${m.id}" style="--lc:${l.color}">
+      <span class="dc-tag">Défi du jour</span>
+      ${pict(l.id, 'pict-md')}
+      <span class="dc-mid"><b>${l.name} · ${esc(l.stations[m.from].name)} › ${esc(l.stations[m.to].name)}</b><small>${n} arrêts · ${wx} · Z 2N imposée · même parcours pour tous</small></span>
+      <span class="dc-end">${res}</span>
+    </button>`;
+}
+
 // ---------------------------------------------------------------------------
 // Onglet Départs : missions de la ligne choisie
 // ---------------------------------------------------------------------------
@@ -225,7 +243,6 @@ function showStationTip(name, x, y) {
 function renderDeparts(body) {
   const l = LINES[state.line] ?? LINES.U;
   const prog = C.progress();
-  const daily = dailyMission();
   const row = (m) => {
     const p = prog[m.id];
     const open = missionOpen(m);
@@ -251,15 +268,15 @@ function renderDeparts(body) {
   };
   const crown = state.crowns?.[l.id]?.crown;
   body.innerHTML = `
+    ${dailyCard()}
     <div class="line-tabs">${Object.values(LINES).map((x) => `<button type="button" class="lt${x.id === l.id ? ' on' : ''}${lineOpen(x.id) ? '' : ' locked'}" data-act="${lineOpen(x.id) ? 'line' : 'locked'}" data-id="${x.id}" data-why="${lineOpen(x.id) ? '' : esc(`${LINE_UNLOCK[x.id].stars} ★ sur la ${LINES[LINE_UNLOCK[x.id].line].name} pour débloquer`)}">${pict(x.id, 'pict-sm')}</button>`).join('')}</div>
     <section class="board">
       <div class="board-head">
         <div><h1 class="board-title">Départs</h1><p class="board-sub">${l.kind} · ${l.name}${crown ? ` · 👑 ${esc(crown.pseudo)}` : ''}</p></div>
         <div class="board-brand">${pict(l.id, 'pict-lg')}</div>
       </div>
-      ${row(daily)}
       ${MISSIONS.filter((m) => m.line === l.id).map(row).join('')}
-      <div class="board-foot"><span class="best">${starsOn(l.id)} / ${maxStarsOn(l.id)} ★ sur la ${l.name}</span><span class="howto">Le défi du jour impose la Z 2N : tout le monde à armes égales.</span></div>
+      <div class="board-foot"><span class="best">${starsOn(l.id)} / ${maxStarsOn(l.id)} ★ sur la ${l.name}</span><span class="howto">Touche une mission pour voir la fiche et choisir ton fantôme.</span></div>
     </section>`;
 }
 
