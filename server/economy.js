@@ -2,6 +2,7 @@
 // Tous les tirages se font ici avec un générateur cryptographique : le client ne fait qu'afficher.
 
 import { RAMES, LIVREES, RARITIES, MAX_LEVEL, levelCost, BOX_SHOP } from '../public/js/drive/route.js';
+import { drawStaff, staffStmt, cardInfo } from './network.js';
 
 export const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS wallet (
@@ -43,17 +44,17 @@ export const MIGRATIONS = [
 export const BOXES = {
   standard: {
     ...BOX_SHOP.standard,
-    tickets: [40, 120], parts: [3, 8], rameChance: 0.12, livreeChance: 0.1,
+    tickets: [40, 120], parts: [3, 8], rameChance: 0.12, livreeChance: 0.1, staffChance: 0.4,
     weights: { commun: 60, rare: 28, epique: 9, legendaire: 2.6, mythique: 0.4 },
   },
   rare: {
     ...BOX_SHOP.rare,
-    tickets: [100, 250], parts: [8, 18], rameChance: 0.4, livreeChance: 0.3,
+    tickets: [100, 250], parts: [8, 18], rameChance: 0.4, livreeChance: 0.3, staffChance: 0.75,
     weights: { commun: 18, rare: 45, epique: 26, legendaire: 9.5, mythique: 1.5 },
   },
   legendaire: {
     ...BOX_SHOP.legendaire,
-    tickets: [250, 500], parts: [20, 40], rameChance: 1, livreeChance: 0.6,
+    tickets: [250, 500], parts: [20, 40], rameChance: 1, livreeChance: 0.6, staffChance: 1,
     weights: { commun: 0, rare: 0, epique: 70, legendaire: 25, mythique: 5 },
   },
 };
@@ -142,6 +143,13 @@ export async function openBox(env, userId, kind) {
     else stmts.push(env.DB.prepare('INSERT OR IGNORE INTO livrees (user_id, livree) VALUES (?, ?)').bind(userId, id));
     items.push({ type: 'livree', id, rarity: LIVREES[id].rarity, dup });
   }
+  if (rand() < def.staffChance) {
+    const rarity = pickRarity(def.weights);
+    const d = await drawStaff(env, userId, rarity);
+    const info = await cardInfo(env, d.card);
+    stmts.push(staffStmt(env, userId, d.card));
+    items.push({ type: 'staff', id: d.card, rarity: info.rarity, name: info.name, role: info.role, trait: info.trait, pote: !!info.pote, dup: d.dup, levelUp: d.levelUp });
+  }
   if (rand() < def.rameChance) {
     const rarity = pickRarity(def.weights);
     const id = pickOf(RAMES, rarity);
@@ -156,8 +164,10 @@ export async function openBox(env, userId, kind) {
   if (bonusParts) items.push({ type: 'parts', n: bonusParts, why: 'Rame en double' });
   stmts.push(env.DB.prepare('UPDATE wallet SET tickets = tickets + ?, parts = parts + ? WHERE user_id = ?').bind(tickets + bonusTickets, parts + bonusParts, userId));
   await env.DB.batch(stmts);
-  const order = { tickets: 0, parts: 1, livree: 2, rame: 3 };
-  items.sort((a, b) => order[a.type] - order[b.type] || (RARITIES_ORDER[a.rarity] ?? 0) - (RARITIES_ORDER[b.rarity] ?? 0));
+  // monnaie d'abord, puis du moins rare au plus rare : le gros lot arrive en dernier
+  const order = { tickets: 0, parts: 1, livree: 2, staff: 3, rame: 4 };
+  const cur = (it) => (it.type === 'tickets' || it.type === 'parts' ? 0 : 1);
+  items.sort((a, b) => cur(a) - cur(b) || (RARITIES_ORDER[a.rarity] ?? 0) - (RARITIES_ORDER[b.rarity] ?? 0) || order[a.type] - order[b.type]);
   return items;
 }
 

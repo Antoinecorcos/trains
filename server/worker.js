@@ -2,11 +2,15 @@
 // Sert le jeu (fichiers statiques) et l'API /api/* : comptes, parties vérifiées, classements, fantômes, fil d'actu.
 // Le serveur fait foi : il rejoue chaque partie à partir du journal des commandes et recalcule le score.
 
-import { missionById, dailyKey, MISSIONS, LINES, RAMES, LIVREES } from '../public/js/drive/route.js';
+import { missionById, dailyKey, weekKey, MISSIONS, LINES, RAMES, LIVREES } from '../public/js/drive/route.js';
+import { withSabotage, SABOTAGES, ROLES } from '../public/js/drive/reseau.js';
 import { computeSchedule, replay } from '../public/js/drive/sim.js';
 import {
   ECONOMY_SCHEMA, MIGRATIONS, ensureWallet, profile, ownedRame, ownsLivree, addBox, addTickets, openBox, buyBox, upgradeRame, equip, claimDaily, runReward,
 } from './economy.js';
+import {
+  NETWORK_SCHEMA, NETWORK_MIGRATIONS, network, collect, renovate, assignStaff, sabotage, pendingSabotage, runTicketsFx, weekly, bulletin, openLines,
+} from './network.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -61,8 +65,8 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       if (!schemaReady) {
-        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA].map((q) => env.DB.prepare(q)));
-        for (const q of MIGRATIONS) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
+        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA, ...NETWORK_SCHEMA].map((q) => env.DB.prepare(q)));
+        for (const q of [...MIGRATIONS, ...NETWORK_MIGRATIONS]) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
         schemaReady = true;
       }
       return await route(req, env, url);
@@ -114,7 +118,44 @@ async function route(req, env, url) {
     const gift = await claimDaily(env, u.id, dailyKey(now), dailyKey(new Date(now.getTime() - 86400000)));
     return json({ gift, profile: await profile(env, u.id) });
   }
+  // Réseau : caisses, chantiers, personnel, sabotage, semaine
+  if (p === '/api/network' && m === 'GET') return json(await network(env, await auth(req, env)));
+  if (p === '/api/collect' && m === 'POST') { const u = await auth(req, env); const n = await collect(env, u); return json({ collected: n, network: await network(env, u), profile: await profile(env, u.id) }); }
+  if (p === '/api/renovate' && m === 'POST') {
+    const u = await auth(req, env);
+    const b = await body(req);
+    const r = await renovate(env, u, b.station);
+    return json({ ...r, network: await network(env, u), profile: await profile(env, u.id) });
+  }
+  if (p === '/api/staff/assign' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await assignStaff(env, u, b.card, b.line || null); return json(await network(env, u)); }
+  if (p === '/api/sabotage' && m === 'POST') {
+    const u = await auth(req, env);
+    const r = await sabotage(env, u, await body(req));
+    return json({ ...r, network: await network(env, u) });
+  }
+  if (p === '/api/targets' && m === 'GET') return targets(env, await auth(req, env));
+  if (p === '/api/weekly' && m === 'GET') {
+    const now = new Date();
+    return json({ current: await weekly(env, weekKey(now)), previous: await weekly(env, weekKey(new Date(now.getTime() - 7 * 86400000))) });
+  }
+  if (p === '/api/bulletin' && m === 'GET') {
+    const now = new Date();
+    const key = url.searchParams.get('week') === 'current' ? weekKey(now) : weekKey(new Date(now.getTime() - 7 * 86400000));
+    return json(await bulletin(env, key));
+  }
   throw new HttpError(404, 'Adresse inconnue.');
+}
+
+// Joueurs que l'on peut saboter, avec les lignes qu'ils exploitent
+async function targets(env, user) {
+  const users = await env.DB.prepare('SELECT id, pseudo FROM users WHERE id != ? ORDER BY pseudo COLLATE NOCASE LIMIT 60').bind(user.id).all();
+  const pend = await env.DB.prepare("SELECT to_user, line FROM sabotages WHERE state = 'pending'").all();
+  const out = [];
+  for (const u of users.results) {
+    const open = await openLines(env, u.id);
+    out.push({ pseudo: u.pseudo, lines: open, pending: pend.results.filter((x) => x.to_user === u.id).map((x) => x.line) });
+  }
+  return json({ players: out });
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +260,12 @@ function checkMission(id) {
     const ok = [-1, 0, 1].some((d) => dailyKey(new Date(now.getTime() + d * 86400000)) === key);
     if (!ok) throw new HttpError(400, 'Ce défi du jour est terminé.');
   }
+  if (m.weekly) {
+    const key = Number(m.id.slice(7));
+    const now = new Date();
+    const ok = [-1, 0, 1].some((d) => weekKey(new Date(now.getTime() + d * 86400000)) === key);
+    if (!ok) throw new HttpError(400, 'Ce défi hebdo est terminé.');
+  }
   return m;
 }
 
@@ -244,11 +291,15 @@ async function submitRun(env, user, b) {
     rame = { id: b.rame, level: own.level };
   }
   const livree = b.livree && LIVREES[b.livree] && (await ownsLivree(env, user.id, b.livree)) ? b.livree : 'origine';
-  const r = replay(mission, sched, b.log, rame);
+  // Un sabotage en attente sur cette ligne s'applique au service (jamais aux défis à armes égales)
+  const sab = mission.daily || mission.weekly ? null : await pendingSabotage(env, user.id, mission.line);
+  const played = sab ? withSabotage(mission, { kind: sab.kind, by: sab.by }) : mission;
+  const r = replay(played, sched, b.log, rame);
   if (!r.over) throw new HttpError(400, 'Partie incomplète : elle n\'a pas pu être vérifiée.');
   const res = r.result;
   const now = Date.now();
-  await env.DB.prepare('INSERT INTO runs (user_id, mission, score, stars, at) VALUES (?, ?, ?, ?, ?)').bind(user.id, mission.id, res.score, res.stars, now).run();
+  await env.DB.prepare('INSERT INTO runs (user_id, mission, score, stars, at, pct, line) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(user.id, mission.id, res.score, res.stars, now, Math.max(0, res.score) / res.ref, mission.line).run();
 
   const prev = await env.DB.prepare('SELECT score, stars FROM best WHERE user_id = ? AND mission = ?').bind(user.id, mission.id).first();
   const leaderBefore = await env.DB.prepare('SELECT b.user_id, u.pseudo, b.score FROM best b JOIN users u ON u.id = b.user_id WHERE b.mission = ? ORDER BY b.score DESC, b.at ASC LIMIT 1').bind(mission.id).first();
@@ -269,7 +320,9 @@ async function submitRun(env, user, b) {
     crown = true;
     if (leaderBefore && leaderBefore.user_id !== user.id) {
       dethroned = leaderBefore.pseudo;
-      await addEvent(env, 'crown', `👑 ${user.pseudo} prend la tête de « ${mission.title} » (${fmt(res.score)} pts) et détrône ${dethroned}.`);
+      await addEvent(env, 'crown', mission.weekly
+        ? `🎖️ ${user.pseudo} prend la couronne de régulateur de la semaine à ${dethroned} (${fmt(res.score)} pts).`
+        : `👑 ${user.pseudo} prend la tête de « ${mission.title} » (${fmt(res.score)} pts) et détrône ${dethroned}.`);
     } else if (!leaderBefore) {
       await addEvent(env, 'crown', `👑 ${user.pseudo} ouvre le classement de « ${mission.title} » avec ${fmt(res.score)} pts.`);
     }
@@ -281,11 +334,29 @@ async function submitRun(env, user, b) {
   if (res.stats.hits) await addEvent(env, 'shame', `🐗 ${user.pseudo} a percuté un sanglier sur « ${mission.title} ».`);
   if (res.stats.spad) await addEvent(env, 'shame', `🚨 ${user.pseudo} a franchi un signal fermé sur « ${mission.title} ».`);
 
+  // Sabotage : déjoué (2 étoiles sans percuter ni franchir de signal) ou réussi
+  let sabotageOut = null;
+  const fx = await runTicketsFx(env, user.id, mission.line);
+  if (sab) {
+    const foiled = res.stars >= 2 && !res.stats.hits && !res.stats.spad;
+    const what = SABOTAGES[sab.kind].name.toLowerCase();
+    const bonus = foiled ? Math.round(80 * (fx.foil ?? 1)) : 60;
+    await env.DB.prepare('UPDATE sabotages SET state = ?, done_at = ? WHERE id = ?').bind(foiled ? 'foiled' : 'success', now, sab.id).run();
+    if (foiled) {
+      await addTickets(env, user.id, bonus);
+      await addEvent(env, 'sabotage', `🛡️ ${user.pseudo} a déjoué le sabotage de ${sab.by} (${what}) sur la ${LINES[mission.line].name}.`);
+    } else {
+      await addTickets(env, sab.from_user, bonus);
+      await addEvent(env, 'sabotage', `😈 Le sabotage de ${sab.by} (${what}) a eu raison de ${user.pseudo} sur la ${LINES[mission.line].name}.`);
+    }
+    sabotageOut = { by: sab.by, kind: sab.kind, foiled, bonus: foiled ? bonus : 0 };
+  }
+
   // Récompenses : tickets à chaque partie, colis pour les exploits
-  const reward = { tickets: runReward(res), boxes: [] };
+  const reward = { tickets: Math.round(runReward(res) * (fx.tickets ?? 1)), boxes: [] };
   if (res.stars === 3 && (!prev || prev.stars < 3)) reward.boxes.push('rare');
   if (crown && dethroned) reward.boxes.push('rare');
-  if (mission.daily) {
+  if (mission.daily || mission.weekly) {
     const already = await env.DB.prepare('SELECT COUNT(*) AS n FROM runs WHERE user_id = ? AND mission = ?').bind(user.id, mission.id).first();
     if (already.n === 1) reward.boxes.push('standard');
   }
@@ -297,7 +368,7 @@ async function submitRun(env, user, b) {
   const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM best WHERE mission = ?').bind(mission.id).first();
   return json({
     score: res.score, stars: res.stars, best: isBest, previous: prev?.score ?? null,
-    rank: rank.n + 1, players: total.n, crown, dethroned, reward,
+    rank: rank.n + 1, players: total.n, crown, dethroned, reward, sabotage: sabotageOut,
   });
 }
 
@@ -370,6 +441,7 @@ async function boxEvent(env, user, items) {
     if (it.type === 'rame' && (it.rarity === 'legendaire' || it.rarity === 'mythique')) {
       await addEvent(env, 'loot', `✨ ${user.pseudo} a sorti la rame ${it.rarity === 'mythique' ? 'MYTHIQUE' : 'légendaire'} ${RAMES[it.id].name} !`);
     }
+    if (it.type === 'staff' && it.pote) await addEvent(env, 'loot', `🃏 ${user.pseudo} a tiré la carte légendaire de ${it.name} (${ROLES[it.role].name.toLowerCase()}).`);
     if (it.type === 'livree' && it.rarity === 'mythique') await addEvent(env, 'loot', `✨ ${user.pseudo} a déniché la livrée ${LIVREES[it.id].name}.`);
   }
 }

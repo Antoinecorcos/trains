@@ -96,4 +96,12 @@ export const api = {
   buyBox: (kind) => api.call('/api/box/buy', { method: 'POST', body: { kind } }),
   upgrade: (rame) => api.call('/api/rame/upgrade', { method: 'POST', body: { rame } }),
   daily: () => api.call('/api/daily', { method: 'POST' }),
+  network: () => api.call('/api/network'),
+  collect: () => api.call('/api/collect', { method: 'POST' }),
+  renovate: (station) => api.call('/api/renovate', { method: 'POST', body: { station } }),
+  assignStaff: (card, line) => api.call('/api/staff/assign', { method: 'POST', body: { card, line } }),
+  sabotage: (pseudo, line, kind) => api.call('/api/sabotage', { method: 'POST', body: { pseudo, line, kind } }),
+  targets: () => api.call('/api/targets'),
+  weekly: () => api.call('/api/weekly'),
+  bulletin: (week = 'last') => api.call(`/api/bulletin?week=${week}`),
 };

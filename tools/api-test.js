@@ -1,5 +1,6 @@
 // Teste l'API locale (npx wrangler dev) : inscription, parties vérifiées, classement, fantôme, fil d'actu.
-import { missionById } from '../public/js/drive/route.js';
+import { missionById, weeklyMission } from '../public/js/drive/route.js';
+import { withSabotage } from '../public/js/drive/reseau.js';
 import { createRun, step, aiInput, computeSchedule, newLog, record } from '../public/js/drive/sim.js';
 
 const BASE = process.env.API ?? 'http://localhost:8787';
@@ -8,9 +9,10 @@ const call = async (path, opts = {}, token) => {
   return { status: r.status, data: await r.json() };
 };
 
-function play(id, sloppy = 0) {
-  const m = missionById(id);
-  const r = createRun(m, { sched: computeSchedule(m) });
+function play(id, sloppy = 0, sab = null) {
+  const base = missionById(id);
+  const m = withSabotage(base, sab);
+  const r = createRun(m, { sched: computeSchedule(base) });
   const log = newLog();
   while (!r.over) {
     const i = aiInput(r);
@@ -77,3 +79,51 @@ const lines = await call('/api/lines');
 console.log('lines', JSON.stringify(lines.data.lines));
 prof = await call('/api/profile', {}, tok);
 console.log('profile after', { tickets: prof.data.tickets, parts: prof.data.parts, rames: prof.data.rames.length, livrees: prof.data.livrees, boxes: prof.data.boxes });
+
+// ---- Réseau : caisses, chantiers, personnel, sabotage, semaine ----
+let net = await call('/api/network', {}, tok);
+console.log('network', net.status, { open: net.data.open, caisses: net.data.caisses, staff: net.data.staff.map((c) => `${c.name} (${c.rarity}, ${c.role})`), token: net.data.sabotageToken });
+const col = await call('/api/collect', { method: 'POST' }, tok);
+console.log('collect (vide)', col.status, col.data.error ?? col.data.collected);
+const ren = await call('/api/renovate', { method: 'POST', body: JSON.stringify({ station: 'Saint-Cloud' }) }, tok);
+console.log('renovate Saint-Cloud', ren.status, ren.data.error ?? { level: ren.data.level, minutes: Math.round((ren.data.until - Date.now()) / 60000) });
+const ren2 = await call('/api/renovate', { method: 'POST', body: JSON.stringify({ station: 'Saint-Cloud' }) }, tok);
+console.log('renovate twice', ren2.status, ren2.data.error);
+const ren3 = await call('/api/renovate', { method: 'POST', body: JSON.stringify({ station: 'Rambouillet' }) }, tok);
+console.log('renovate hors réseau', ren3.status, ren3.data.error);
+net = await call('/api/network', {}, tok);
+if (net.data.staff.length) {
+  const as = await call('/api/staff/assign', { method: 'POST', body: JSON.stringify({ card: net.data.staff[0].id, line: 'U' }) }, tok);
+  console.log('assign staff U', as.status, as.data.error ?? as.data.staff.filter((c) => c.line).map((c) => `${c.name} → ${c.line}`));
+}
+const asBad = await call('/api/staff/assign', { method: 'POST', body: JSON.stringify({ card: 'nadia', line: 'C' }) }, tok);
+console.log('assign ligne fermée / carte absente', asBad.status, asBad.data.error);
+
+// Thomas sabote Antoine sur la U ; Antoine roule (bien) : sabotage déjoué
+const tg = await call('/api/targets', {}, b.data.token);
+console.log('targets', tg.status, tg.data.players?.filter((x) => x.pseudo.endsWith(String(stamp))));
+const sb = await call('/api/sabotage', { method: 'POST', body: JSON.stringify({ pseudo: `Antoine${stamp}`, line: 'U', kind: 'sanglier' }) }, b.data.token);
+console.log('sabotage', sb.status, sb.data.error ?? { pseudo: sb.data.pseudo, line: sb.data.line, kind: sb.data.kind });
+const sb2 = await call('/api/sabotage', { method: 'POST', body: JSON.stringify({ pseudo: `Antoine${stamp}`, line: 'U', kind: 'signal' }) }, b.data.token);
+console.log('sabotage twice', sb2.status, sb2.data.error);
+const sbL = await call('/api/sabotage', { method: 'POST', body: JSON.stringify({ pseudo: `Thomas${stamp}`, line: 'C', kind: 'signal' }) }, tok);
+console.log('sabotage ligne non exploitée', sbL.status, sbL.data.error);
+net = await call('/api/network', {}, tok);
+console.log('incoming', net.data.incoming);
+const sabPlay = play('m1', 0, { kind: 'sanglier', by: `Thomas${stamp}` });
+const rs = await call('/api/runs', { method: 'POST', body: JSON.stringify({ mission: 'm1', log: sabPlay.log }) }, tok);
+console.log('run sabotée', rs.status, 'client', sabPlay.score, 'server', rs.data.score, rs.data.sabotage, rs.data.reward);
+net = await call('/api/network', {}, tok);
+console.log('incoming after', net.data.incoming.length);
+
+// Défi hebdo
+const wk = weeklyMission();
+const wp = play(wk.id);
+const rw = await call('/api/runs', { method: 'POST', body: JSON.stringify({ mission: wk.id, log: wp.log }) }, tok);
+console.log('weekly run', rw.status, 'client', wp.score, 'server', rw.data.score, rw.data.crown, rw.data.reward);
+const wkly = await call('/api/weekly');
+console.log('weekly', wkly.status, { regulateur: wkly.data.current.regulateur, udor: wkly.data.current.udor, line: wkly.data.current.line });
+const bl = await call('/api/bulletin?week=current');
+console.log('bulletin', bl.status, { runs: bl.data.runs, crowns: bl.data.crowns, sabotages: bl.data.sabotages, mostActive: bl.data.mostActive, udor: bl.data.udor });
+const fd2 = await call('/api/feed');
+console.log('feed', fd2.data.events.slice(0, 5).map((e) => e.text));

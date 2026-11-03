@@ -1,12 +1,18 @@
 # UKIPU — Document de game design
 
+> **Mise à jour V2 (retour au brainstorm).** La conduite reste le cœur des parties de 5 minutes,
+> mais tout le jeu « de fond » imaginé au départ est revenu autour : un réseau à soi sur la carte
+> (gares à rénover en temps réel, caisses à récolter), du personnel à affecter (les potes en cartes
+> légendaires), le sabotage amical, la couronne de régulateur du défi hebdo, la U d'Or et le
+> Bulletin trafic du lundi. Voir la section 0.
+
 > **Mise à jour V1 (jeu complet).** Le cœur du jeu a évolué après les tests : la régulation en
 > 5 minutes manquait de dynamisme. Ukipu est désormais un **jeu de conduite** (vue de côté) où
 > l'on s'arrête au mètre près, gare après gare. Le reste de la vision (expansion par les
 > correspondances, collection, couronnes, ego entre potes) est en place. Le résumé ci-dessous
 > décrit le jeu tel qu'il est ; les sections suivantes gardent la réflexion d'origine.
 
-## 0. Le jeu aujourd'hui (V1)
+## 0. Le jeu aujourd'hui (V2)
 
 | Pilier | Ce qui est en place |
 |---|---|
@@ -16,11 +22,16 @@
 | **Défi du jour** | Ligne, tronçon, météo et aléas tirés au hasard, identiques pour tous, **rame imposée** : à armes égales. |
 | **Collection** | 10 rames (Commun → Mythique) qui conduisent différemment (accélération, freinage, portes, adhérence), 5 niveaux d'amélioration ; 8 livrées visibles par les autres sur leurs fantômes. |
 | **Économie** | Tickets gagnés à chaque partie, pièces détachées, 3 sortes de colis multi-contenu (tirés par le serveur), cadeau quotidien avec série de 7 jours, colis bonus pour les 3 étoiles, les couronnes et le défi du jour. |
-| **Ego** | Classement par mission, couronne par ligne (meilleur cumul de records), classement général, fantômes des potes, fil d'actu (couronnes volées, sorties légendaires, sangliers percutés). |
+| **Ego** | Classement par mission, couronne d'exploitant 👑 par ligne (meilleur cumul de records, avec sa collection), classement général, fantômes des potes, fil d'actu (couronnes volées, sorties légendaires, sangliers percutés). |
+| **Ton réseau (V2)** | Carte schématique façon plan Transilien. Chaque ligne exploitée remplit une **caisse** (30 🎟/h + 8 par niveau de gare, plafond 5 h) à récolter d'un tap. Les **gares se rénovent** en 3 niveaux (20 min, 2 h, 6 h ; 2 chantiers en même temps) : anneaux dorés et chantiers animés sur la carte, recettes en hausse sur toutes les lignes qui desservent la gare. |
+| **Personnel (V2)** | Cartes tirées des colis : agent d'escale (caisse), aiguilleur (caisse et plafond), maintenance (chantiers plus courts), régulateur (tickets des services), sûreté (bonus quand on déjoue un sabotage). Une carte par ligne, niveaux par doublons. **Les cartes légendaires sont les autres joueurs**, avec leur pseudo et un trait. |
+| **Sabotage (V2)** | Un jeton par jour : on envoie un incident (signal capricieux, sanglier, feuilles, travaux, quais bondés) sur le prochain service d'un pote, sur une ligne qu'il exploite. 2 ★ sans percuter ni franchir de signal : il le déjoue et gagne le bonus ; sinon le saboteur l'empoche. Tout part dans le fil d'actu. Jamais sur les défis à armes égales. |
+| **Semaine (V2)** | **Défi hebdo** (plus long, deux aléas par interstation, Z 2N imposée) : son meilleur score prend la **couronne de régulateur** 🎖️. **U d'Or** 🏆 : le pire service de la semaine (score le plus bas par rapport au potentiel). **Bulletin trafic du lundi** à copier dans le groupe. |
 | **Confiance** | Le serveur rejoue chaque partie à partir du journal des commandes : impossible d'envoyer un faux score ou de rouler avec une rame qu'on ne possède pas. |
 
-Pas encore fait : monétisation (Pass Navigo, livrées payantes), sabotage entre potes, mode duo,
-extension métro, poste d'aiguillage multi-lignes.
+Pas encore fait : monétisation (Pass Navigo, livrées payantes), mode duo, technicentre (usure des
+rames), cartes image partageables, bonus de retour des occasionnels, extension métro, poste
+d'aiguillage multi-lignes.
 
 ---
 

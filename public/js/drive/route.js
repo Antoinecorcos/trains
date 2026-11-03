@@ -301,6 +301,8 @@ export function missionById(id) {
   if (m) return m;
   const d = /^daily-(\d{8})$/.exec(id);
   if (d) return dailyMission(null, Number(d[1]));
+  const w = /^weekly-(\d{8})$/.exec(id);
+  if (w) return weeklyMission(null, Number(w[1]));
   return null;
 }
 
@@ -335,6 +337,50 @@ export function dailyMission(date = new Date(), forcedKey = null) {
         if (p === 'animal') h.animal(s, s + dir, 0.3 + r() * 0.4);
         if (p === 'works') h.works(s, s + dir, 0.3, 0.65);
         if (p === 'runner') h.runner(s + dir);
+      }
+    },
+  };
+}
+
+// Semaine de jeu : identifiée par la date de son lundi (AAAAMMJJ)
+export function weekKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dailyKey(d);
+}
+
+// Défi hebdo : la couronne de régulateur. Plus long que le défi du jour, deux aléas par interstation,
+// Z 2N imposée : du pur talent, remis en jeu chaque lundi.
+export function weeklyMission(date = new Date(), forcedKey = null) {
+  const key = forcedKey ?? weekKey(date);
+  const rng = mulberry32(key * 31 + 7);
+  const ids = Object.keys(LINES);
+  const line = LINES[ids[Math.floor(rng() * ids.length)]];
+  const n = line.stations.length;
+  const len = Math.min(n - 1, 7 + Math.floor(rng() * 3));
+  let from = Math.floor(rng() * (n - len));
+  let to = from + len;
+  if (rng() < 0.5) [from, to] = [to, from];
+  const weather = ['clear', 'rain', 'snow', 'rain'][Math.floor(rng() * 4)];
+  const light = 0.08 + rng() * 0.85;
+  const clock = [6 + Math.floor(rng() * 16), Math.floor(rng() * 60)];
+  return {
+    id: `weekly-${key}`, weekly: true, line: line.id, title: 'Défi hebdo', from, to, clock, need: 0, weather, light, fixedRame: 'Z2N', crowd: 1.2,
+    blurb: `${line.name} : ${line.stations[from].name} → ${line.stations[to].name}. Même tracé, mêmes aléas, même Z 2N pour tous jusqu'à dimanche soir. Le meilleur prend la couronne de régulateur.`,
+    build: (h) => {
+      const r = mulberry32(key * 13 + 5);
+      const picks = ['signal', 'limit', 'leaves', 'animal', 'works', 'runner'];
+      const dir = to > from ? 1 : -1;
+      for (let s = from; s !== to; s += dir) {
+        for (const f of [0.15, 0.55]) {
+          const p = picks[Math.floor(r() * picks.length)];
+          if (p === 'signal') h.signal(s, s + dir, f + r() * 0.25, 5 + Math.floor(r() * 5));
+          if (p === 'limit') h.limit(s, s + dir, f, f + 0.3, r() < 0.5 ? 60 : 80, 'Courbe');
+          if (p === 'leaves') h.leaves(s, s + dir, f, f + 0.35);
+          if (p === 'animal') h.animal(s, s + dir, f + r() * 0.3);
+          if (p === 'works') h.works(s, s + dir, f, f + 0.25);
+          if (p === 'runner') h.runner(s + dir);
+        }
       }
     },
   };

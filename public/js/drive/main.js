@@ -1,12 +1,13 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
-import { MISSIONS, dailyMission, PLATFORM, lineOf, buildRoute } from './route.js';
+import { MISSIONS, dailyMission, weeklyMission, PLATFORM, lineOf, buildRoute } from './route.js';
+import { SABOTAGES } from './reseau.js';
 import {
   DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { api } from './api.js';
-import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen } from './home.js';
+import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage } from './home.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -41,7 +42,7 @@ let runGear = null;
 const schedCache = {};
 const tips = store.get('ukipu.drive.tips', {});
 
-const allMissions = () => [...MISSIONS, dailyMission()];
+const allMissions = () => [...MISSIONS, dailyMission(), weeklyMission()];
 const progKey = () => (api.loggedIn ? `ukipu.drive.progress.u.${api.user.pseudo.toLowerCase()}` : 'ukipu.drive.progress.v2');
 const ghostKey = (id) => (api.loggedIn ? `ukipu.drive.ghost.u.${api.user.pseudo.toLowerCase()}.${id}` : `ukipu.drive.ghost.v2.${id}`);
 const progress = () => store.get(progKey(), {});
@@ -161,7 +162,8 @@ async function startMission(m) {
   ghost = await loadGhost(m);
   starting = false;
   const g = gear(m);
-  run = createRun(m, { sched, rame: g.rame });
+  // le sabotage d'un pote s'ajoute au parcours ; l'horaire reste celui du service normal
+  run = createRun(applySabotage(m), { sched, rame: g.rame });
   run.livree = g.livree;
   runGear = g;
   runLog = newLog();
@@ -697,7 +699,7 @@ function showEnd() {
   const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const vsPrev = prev ? `${res.score >= prev.score ? '+' : ''}${fr0.format(res.score - prev.score)} pts vs record` : 'Premier record';
   $('ticket').innerHTML = `
-    <div class="tk-head"><span>Bulletin de conduite · Ligne U</span></div>
+    <div class="tk-head"><span>Bulletin de conduite · ${lineOf(mission).name}</span></div>
     <h2 class="tk-title">${title}</h2>
     <p class="tk-sub">${mission.title} · ${lineOf(mission).stations[mission.from].name} → ${lineOf(mission).stations[mission.to].name}</p>
     <div class="tk-big"><b>${fr0.format(res.score)}</b><span>points${isBest ? ' · record !' : ''}</span></div>
@@ -731,6 +733,12 @@ async function sendRun(m, log, g) {
     else if (r.crown) html = r.players > 1 ? '👑 <b>Tu gardes la tête</b> du classement.' : '👑 <b>Premier au classement</b> de cette mission.';
     else html = `Classement : <b>${r.rank}<sup>e</sup></b> sur ${r.players}${r.best ? ' · nouveau record perso' : ''}`;
     if (r.score !== run?.result?.score) html += `<small>Score vérifié par le serveur : ${fr0.format(r.score)} pts</small>`;
+    if (r.sabotage) {
+      const s = r.sabotage;
+      html += s.foiled
+        ? `<div class="tk-sabo ok">🛡️ Sabotage de <b>${esc(s.by)}</b> déjoué ! +${s.bonus} 🎟</div>`
+        : `<div class="tk-sabo">😈 Le sabotage de <b>${esc(s.by)}</b> (${SABOTAGES[s.kind].name.toLowerCase()}) t'a eu. Tout le groupe va le savoir.</div>`;
+    }
     if (r.reward) {
       html += `<div class="tk-reward">+${fr0.format(r.reward.tickets)} 🎟${r.reward.boxes.map((k) => ` · 🎁 ${k === 'rare' ? 'colis rare' : 'colis'}`).join('')}</div>`;
       if (r.reward.boxes.length) html += `<button class="pill pill-good tk-open" type="button" id="tk-open" data-kind="${r.reward.boxes[0]}">Ouvrir le colis</button>`;

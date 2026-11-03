@@ -8,6 +8,16 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2 — ton réseau, tes potes
+
+- **Carte façon plan Transilien** : tracés à 45°, correspondances en pastilles, noms qui ne grossissent pas au zoom, Seine animée, trains qui circulent.
+- **Caisses** : chaque ligne exploitée rapporte des tickets en continu (plafond 5 h). Touche 💰 pour récolter.
+- **Chantiers** : touche une gare pour la rénover (3 niveaux, de 20 min à 6 h, 2 chantiers à la fois). Plus de recettes sur toutes ses lignes.
+- **Personnel** : cartes tirées des colis, une par ligne (escale, aiguilleur, maintenance, régulateur, sûreté). Les légendaires… ce sont les autres joueurs.
+- **Sabotage amical** : un jeton par jour (😈 dans le Classement). Le pote visé le découvre avant son prochain service ; 2 ★ sans incident pour le déjouer.
+- **Défi hebdo** : couronne de régulateur 🎖️, Z 2N pour tous. **U d'Or** 🏆 du pire service de la semaine. **Bulletin du lundi** à copier dans le groupe.
+- Les défis du jour et de la semaine ont leurs propres cartes, avec le pictogramme de leur ligne.
+
 ## V1 — le jeu complet
 
 - **5 lignes** : U, L, N, RER C, RER A — 21 missions + un défi du jour, tunnels, ponts sur la Seine, Paris, nuit, pluie et neige.
@@ -73,13 +83,15 @@ node tools/headless.js 30 bot
 | Fichier | Rôle |
 |---|---|
 | `public/index.html`, `public/css/drive.css` | Mode conduite (PWA, iPhone et PC) |
-| `public/js/drive/route.js` | Lignes, gares, missions, aléas, défi du jour, rames, livrées, colis |
+| `public/js/drive/route.js` | Lignes, gares, missions, aléas, défis du jour et hebdo, rames, livrées, colis |
+| `public/js/drive/reseau.js` | Gares à rénover, caisses, personnel, sabotages (partagé client/serveur) |
+| `public/js/drive/netmap.js` | Plan du réseau sur Canvas |
 | `public/js/drive/home.js` | Accueil : carte du réseau, départs, dépôt, colis, classement, fiche mission |
 | `public/js/drive/sim.js` | Physique et règles de conduite déterministes, conducteur titulaire (IA) |
 | `public/js/drive/world.js` | Vue de côté : décors en parallaxe, quais, Z 2N |
 | `public/js/drive/main.js`, `public/js/drive/audio.js` | Pupitre, écrans, sons synthétisés |
 | `public/js/drive/api.js` | Accès au serveur (comptes, parties, classements, fantômes) |
-| `server/worker.js`, `server/economy.js`, `wrangler.toml` | Serveur Cloudflare (Worker + D1) : comptes, parties, économie |
+| `server/worker.js`, `server/economy.js`, `server/network.js`, `wrangler.toml` | Serveur Cloudflare (Worker + D1) : comptes, parties, économie, réseau, semaine |
 | `public/regulation.html`, `public/css/style.css` | Ancien mode régulation |
 | `public/js/data.js` | Ligne U, personnel, incidents, scénario |
 | `public/js/sim.js` | Simulation déterministe — réutilisable côté serveur pour rejouer une partie |

@@ -1,9 +1,11 @@
 // Fait rouler le conducteur titulaire sur chaque mission pour vérifier horaires, notes et rejeu.
-import { MISSIONS, dailyMission, lineOf } from '../public/js/drive/route.js';
+import { MISSIONS, dailyMission, weeklyMission, lineOf } from '../public/js/drive/route.js';
+import { withSabotage, SABOTAGES } from '../public/js/drive/reseau.js';
 import { createRun, step, aiInput, computeSchedule, newLog, record, replay } from '../public/js/drive/sim.js';
 
 const rame = process.argv[2] ?? 'Z2N';
-for (const m of [...MISSIONS, dailyMission()]) {
+const sabotaged = Object.keys(SABOTAGES).map((kind, i) => ({ ...withSabotage(MISSIONS[i * 3], { kind, by: 'Test' }), id: MISSIONS[i * 3].id }));
+for (const m of [...MISSIONS, dailyMission(), weeklyMission(), ...sabotaged]) {
   const sched = computeSchedule(m);
   const r = createRun(m, { sched, rame: { id: rame, level: 1 } });
   const log = newLog();

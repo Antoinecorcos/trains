@@ -112,7 +112,7 @@ export function mountNetMap(host, opts) {
   function fit(focus = opts.focus) {
     resize();
     const top = 108;
-    const bot = 150;
+    const bot = 180;
     let pts = Object.values(SCHEMA).flat();
     if (focus && W < 640) pts = SCHEMA[focus].concat(SCHEMA.A.slice(0, 2), SCHEMA.L.slice(3, 6));
     const xs = pts.map((p) => p[0]);
@@ -255,6 +255,7 @@ export function mountNetMap(host, opts) {
     }
 
     // gares : pastilles de correspondance et points
+    const net = opts.net?.() ?? null;
     const hits = [];
     const labels = [];
     for (const st of stations.values()) {
@@ -282,13 +283,39 @@ export function mountNetMap(host, opts) {
         ctx.beginPath(); ctx.arc(cx, cy, st.end ? 6.5 : 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
       ctx.globalAlpha = 1;
+      const ns = net?.stations?.[st.name];
+      if (ns && !dim) {
+        if (ns.level > 0) {
+          // anneaux dorés : un par niveau de rénovation
+          ctx.strokeStyle = '#ffd200';
+          ctx.shadowColor = '#ffd200';
+          ctx.shadowBlur = 8;
+          ctx.lineWidth = 1.6;
+          for (let k = 0; k < ns.level; k++) { ctx.beginPath(); ctx.arc(cx, cy, 10 + k * 3.5, 0, Math.PI * 2); ctx.stroke(); }
+          ctx.shadowBlur = 0;
+        }
+        if (ns.until) {
+          // chantier en cours : anneau orange qui tourne et cône
+          ctx.strokeStyle = '#ff8a00';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([5, 4]);
+          ctx.lineDashOffset = -time * 12;
+          ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
+          ctx.font = `14px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🚧', cx + 12, cy - 13);
+        }
+      }
       hits.push({ type: 'station', name: st.name, x: cx, y: cy, r: 16 });
       if (!dim) labels.push({ st, x: cx, y: cy, major: major(st) });
     }
 
     // emplacement des pictogrammes (réservé pour que les noms ne passent pas dessous)
     const picts = ORDER.map((id) => { const [x, y] = S(PICT_AT[id]); return { id, x, y, s: selected === id ? 34 : 28 }; });
-    const placed = picts.map((q) => [q.x - q.s / 2 - 2, q.y - q.s / 2 - 2, q.s + 4, q.s + 26]);
+    const placed = picts.map((q) => [q.x - q.s / 2 - 8, q.y - q.s / 2 - 32, q.s + 16, q.s + 58]);
     placed.push([W - 60, 140, 60, 150]); // boutons de zoom
 
     // étiquettes : taille fixe, placées sans chevauchement (les plus importantes d'abord)
@@ -364,6 +391,35 @@ export function mountNetMap(host, opts) {
       }
       ctx.restore();
       hits.push({ type: 'line', id, x: bx, y: by, r: 24 });
+      if (net && open) {
+        const amount = net.caisse(id);
+        if (amount >= 1) {
+          // pièce de caisse qui flotte au-dessus du pictogramme
+          const full = amount >= net.cap(id);
+          const fy = by - s / 2 - 20 + Math.sin(time * 3 + bx) * 3;
+          const txt = `💰 ${amount}`;
+          ctx.font = `900 12px ${FONT}`;
+          const tw = ctx.measureText(txt).width + 14;
+          ctx.save();
+          ctx.shadowColor = full ? '#ffd200' : 'rgba(255,210,0,0.5)';
+          ctx.shadowBlur = full ? 16 + Math.sin(time * 6) * 6 : 8;
+          ctx.fillStyle = full ? '#ffd200' : '#fff3b0';
+          roundRect(ctx, bx - tw / 2, fy - 10, tw, 20, 10);
+          ctx.fill();
+          ctx.restore();
+          ctx.fillStyle = '#0d1663';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(txt, bx, fy + 0.5);
+          hits.push({ type: 'caisse', id, x: bx, y: fy, r: 22 });
+        }
+        if (net.incoming?.some((x) => x.line === id)) {
+          ctx.font = `18px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('😈', bx - s / 2 - 6, by - s / 2 + 2 + Math.sin(time * 5) * 2);
+        }
+      }
       const crown = opts.crowns?.[id]?.crown;
       if (crown) {
         ctx.font = `900 11px ${FONT}`;
@@ -441,8 +497,10 @@ export function mountNetMap(host, opts) {
           }
         }
       }
-      if (best?.type === 'line') { selected = best.id; opts.onLine?.(best.id); }
+      if (best?.type === 'caisse') opts.onCaisse?.(best.id);
+      else if (best?.type === 'line') { selected = best.id; opts.onLine?.(best.id); }
       else if (best?.type === 'station') opts.onStation?.(best.name, e.clientX, e.clientY);
+      // la carte est redessinée en continu : rien d'autre à faire
       else { selected = null; opts.onEmpty?.(); }
     }
     down = null;
