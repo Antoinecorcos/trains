@@ -36,6 +36,18 @@ Les tables sont créées automatiquement au premier appel du serveur : rien à f
 
 Vérification : `https://ukipu.<ton-sous-domaine>.workers.dev/api/health` doit répondre `{"ok":true,…}`.
 
+## Si un envoi n'est pas mis en ligne
+
+Chaque envoi sur la branche de production doit apparaître dans **Déploiements** avec le message
+du commit. Si rien n'apparaît :
+
+1. **Settings → Build → Branch control** : la branche de production doit être
+   `claude/train-network-game-design-56cuok`.
+2. **Settings → Build → Git repository** : le dépôt `antoinecorcos/trains` doit être connecté.
+3. Côté GitHub, **Settings → Applications → Cloudflare Workers and Pages → Configure** : le dépôt
+   doit faire partie des dépôts autorisés.
+4. En dernier recours : déconnecter puis reconnecter le dépôt dans **Settings → Build**.
+
 ## Changer l'adresse
 
 - Sous-domaine gratuit : **Workers & Pages → Sous-domaine → Modifier** (s'applique à tous les Workers du compte).
