@@ -2,8 +2,11 @@
 // Sert le jeu (fichiers statiques) et l'API /api/* : comptes, parties vérifiées, classements, fantômes, fil d'actu.
 // Le serveur fait foi : il rejoue chaque partie à partir du journal des commandes et recalcule le score.
 
-import { missionById, dailyKey, MISSIONS } from '../public/js/drive/route.js';
+import { missionById, dailyKey, MISSIONS, LINES, RAMES, LIVREES } from '../public/js/drive/route.js';
 import { computeSchedule, replay } from '../public/js/drive/sim.js';
+import {
+  ECONOMY_SCHEMA, MIGRATIONS, ensureWallet, profile, ownedRame, ownsLivree, addBox, addTickets, openBox, buyBox, upgradeRame, equip, claimDaily, runReward,
+} from './economy.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -58,7 +61,8 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       if (!schemaReady) {
-        await env.DB.batch(SCHEMA.map((q) => env.DB.prepare(q)));
+        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA].map((q) => env.DB.prepare(q)));
+        for (const q of MIGRATIONS) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
         schemaReady = true;
       }
       return await route(req, env, url);
@@ -98,6 +102,18 @@ async function route(req, env, url) {
   if (p === '/api/ghost' && m === 'GET') return ghost(env, url.searchParams.get('mission'), url.searchParams.get('pseudo'));
   if (p === '/api/feed' && m === 'GET') return feed(env);
   if (p === '/api/ranking' && m === 'GET') return ranking(env);
+  if (p === '/api/lines' && m === 'GET') return lineCrowns(env);
+  if (p === '/api/profile' && m === 'GET') { const u = await auth(req, env); return json(await profile(env, u.id)); }
+  if (p === '/api/equip' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await equip(env, u.id, b.rame, b.livree); return json(await profile(env, u.id)); }
+  if (p === '/api/box/open' && m === 'POST') { const u = await auth(req, env); const b = await body(req); const items = await openBox(env, u.id, String(b.kind)); await boxEvent(env, u, items); return json({ items, profile: await profile(env, u.id) }); }
+  if (p === '/api/box/buy' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await buyBox(env, u.id, String(b.kind)); return json(await profile(env, u.id)); }
+  if (p === '/api/rame/upgrade' && m === 'POST') { const u = await auth(req, env); const b = await body(req); const level = await upgradeRame(env, u.id, String(b.rame)); return json({ level, profile: await profile(env, u.id) }); }
+  if (p === '/api/daily' && m === 'POST') {
+    const u = await auth(req, env);
+    const now = new Date();
+    const gift = await claimDaily(env, u.id, dailyKey(now), dailyKey(new Date(now.getTime() - 86400000)));
+    return json({ gift, profile: await profile(env, u.id) });
+  }
   throw new HttpError(404, 'Adresse inconnue.');
 }
 
@@ -142,6 +158,8 @@ async function register(env, b) {
   const hash = await hashPassword(password, salt);
   const res = await env.DB.prepare('INSERT INTO users (pseudo, pass_hash, salt, created) VALUES (?, ?, ?, ?)').bind(pseudo, hash, salt, Date.now()).run();
   const id = res.meta.last_row_id;
+  await ensureWallet(env, id);
+  await addBox(env, id, 'standard', 1);
   await addEvent(env, 'join', `🚆 ${pseudo} a pris son service sur la ligne U.`);
   return json({ token: await newSession(env, id), user: { id, pseudo } });
 }
@@ -183,11 +201,12 @@ async function me(env, user) {
 // ---------------------------------------------------------------------------
 
 async function scheduleFor(env, mission) {
-  const row = await env.DB.prepare('SELECT data FROM schedules WHERE mission = ?').bind(mission.id).first();
+  const key = `${mission.id}@2`;
+  const row = await env.DB.prepare('SELECT data FROM schedules WHERE mission = ?').bind(key).first();
   if (row) return JSON.parse(row.data);
   const s = computeSchedule(mission);
   const sched = { arr: s.arr, dep: s.dep };
-  await env.DB.prepare('INSERT OR REPLACE INTO schedules (mission, data) VALUES (?, ?)').bind(mission.id, JSON.stringify(sched)).run();
+  await env.DB.prepare('INSERT OR REPLACE INTO schedules (mission, data) VALUES (?, ?)').bind(key, JSON.stringify(sched)).run();
   return sched;
 }
 
@@ -216,7 +235,16 @@ async function submitRun(env, user, b) {
   const mission = checkMission(b.mission);
   checkLog(b.log);
   const sched = await scheduleFor(env, mission);
-  const r = replay(mission, sched, b.log);
+  await ensureWallet(env, user.id);
+  // Rame et livrée : il faut les posséder (le défi du jour impose sa rame)
+  let rame = { id: 'Z2N', level: 1 };
+  if (!mission.fixedRame && b.rame && RAMES[b.rame]) {
+    const own = await ownedRame(env, user.id, b.rame);
+    if (!own) throw new HttpError(400, 'Cette rame ne fait pas partie de ta collection.');
+    rame = { id: b.rame, level: own.level };
+  }
+  const livree = b.livree && LIVREES[b.livree] && (await ownsLivree(env, user.id, b.livree)) ? b.livree : 'origine';
+  const r = replay(mission, sched, b.log, rame);
   if (!r.over) throw new HttpError(400, 'Partie incomplète : elle n\'a pas pu être vérifiée.');
   const res = r.result;
   const now = Date.now();
@@ -227,9 +255,9 @@ async function submitRun(env, user, b) {
   const isBest = !prev || res.score > prev.score;
   if (isBest) {
     const grades = JSON.stringify(res.grades.map((g) => ({ name: g.name, grade: g.grade, d: g.d == null ? null : Math.round(g.d * 100) / 100 })));
-    await env.DB.prepare(`INSERT INTO best (user_id, mission, score, stars, time, frames, grades, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (user_id, mission) DO UPDATE SET score = excluded.score, stars = MAX(best.stars, excluded.stars), time = excluded.time, frames = excluded.frames, grades = excluded.grades, at = excluded.at`)
-      .bind(user.id, mission.id, res.score, res.stars, res.time, JSON.stringify(r.frames), grades, now).run();
+    await env.DB.prepare(`INSERT INTO best (user_id, mission, score, stars, time, frames, grades, at, rame, livree) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (user_id, mission) DO UPDATE SET score = excluded.score, stars = MAX(best.stars, excluded.stars), time = excluded.time, frames = excluded.frames, grades = excluded.grades, at = excluded.at, rame = excluded.rame, livree = excluded.livree`)
+      .bind(user.id, mission.id, res.score, res.stars, res.time, JSON.stringify(r.frames), grades, now, rame.id, livree).run();
   } else if (res.stars > prev.stars) {
     await env.DB.prepare('UPDATE best SET stars = ? WHERE user_id = ? AND mission = ?').bind(res.stars, user.id, mission.id).run();
   }
@@ -253,18 +281,30 @@ async function submitRun(env, user, b) {
   if (res.stats.hits) await addEvent(env, 'shame', `🐗 ${user.pseudo} a percuté un sanglier sur « ${mission.title} ».`);
   if (res.stats.spad) await addEvent(env, 'shame', `🚨 ${user.pseudo} a franchi un signal fermé sur « ${mission.title} ».`);
 
+  // Récompenses : tickets à chaque partie, colis pour les exploits
+  const reward = { tickets: runReward(res), boxes: [] };
+  if (res.stars === 3 && (!prev || prev.stars < 3)) reward.boxes.push('rare');
+  if (crown && dethroned) reward.boxes.push('rare');
+  if (mission.daily) {
+    const already = await env.DB.prepare('SELECT COUNT(*) AS n FROM runs WHERE user_id = ? AND mission = ?').bind(user.id, mission.id).first();
+    if (already.n === 1) reward.boxes.push('standard');
+  }
+  await addTickets(env, user.id, reward.tickets);
+  await env.DB.prepare('UPDATE wallet SET runs = runs + 1 WHERE user_id = ?').bind(user.id).run();
+  for (const kind of reward.boxes) await addBox(env, user.id, kind);
+
   const rank = await env.DB.prepare('SELECT COUNT(*) AS n FROM best WHERE mission = ? AND score > ?').bind(mission.id, isBest ? res.score : prev.score).first();
   const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM best WHERE mission = ?').bind(mission.id).first();
   return json({
     score: res.score, stars: res.stars, best: isBest, previous: prev?.score ?? null,
-    rank: rank.n + 1, players: total.n, crown, dethroned,
+    rank: rank.n + 1, players: total.n, crown, dethroned, reward,
   });
 }
 
 async function leaderboard(env, missionId, user) {
   const mission = missionById(String(missionId || ''));
   if (!mission) throw new HttpError(400, 'Mission inconnue.');
-  const rows = await env.DB.prepare(`SELECT u.pseudo, b.score, b.stars, b.time, b.grades FROM best b JOIN users u ON u.id = b.user_id
+  const rows = await env.DB.prepare(`SELECT u.pseudo, b.score, b.stars, b.time, b.grades, b.rame, b.livree FROM best b JOIN users u ON u.id = b.user_id
     WHERE b.mission = ? ORDER BY b.score DESC, b.at ASC LIMIT 20`).bind(mission.id).all();
   let mine = null;
   if (user) {
@@ -276,16 +316,16 @@ async function leaderboard(env, missionId, user) {
   }
   return json({
     mission: mission.id,
-    top: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, score: r.score, stars: r.stars, time: r.time, grades: JSON.parse(r.grades) })),
+    top: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, score: r.score, stars: r.stars, time: r.time, rame: r.rame, livree: r.livree, grades: JSON.parse(r.grades) })),
     mine,
   });
 }
 
 async function ghost(env, missionId, pseudo) {
-  const row = await env.DB.prepare('SELECT b.frames, b.score, u.pseudo FROM best b JOIN users u ON u.id = b.user_id WHERE b.mission = ? AND u.pseudo = ?')
+  const row = await env.DB.prepare('SELECT b.frames, b.score, b.rame, b.livree, u.pseudo FROM best b JOIN users u ON u.id = b.user_id WHERE b.mission = ? AND u.pseudo = ?')
     .bind(String(missionId || ''), String(pseudo || '')).first();
   if (!row) throw new HttpError(404, 'Pas de fantôme pour ce conducteur.');
-  return json({ pseudo: row.pseudo, score: row.score, frames: JSON.parse(row.frames) });
+  return json({ pseudo: row.pseudo, score: row.score, rame: row.rame, livree: row.livree, frames: JSON.parse(row.frames) });
 }
 
 async function addEvent(env, kind, text) {
@@ -309,3 +349,28 @@ async function ranking(env) {
 }
 
 const fmt = (n) => new Intl.NumberFormat('fr-FR').format(n);
+
+// Couronne de ligne : le meilleur total de records sur les missions de la ligne
+async function lineCrowns(env) {
+  const out = {};
+  for (const line of Object.values(LINES)) {
+    const ids = MISSIONS.filter((m) => m.line === line.id).map((m) => m.id);
+    const ph = ids.map(() => '?').join(',');
+    const row = await env.DB.prepare(`SELECT u.pseudo, SUM(b.score) AS score, COUNT(*) AS n FROM best b JOIN users u ON u.id = b.user_id
+      WHERE b.mission IN (${ph}) GROUP BY u.id ORDER BY score DESC LIMIT 1`).bind(...ids).first();
+    const players = await env.DB.prepare(`SELECT COUNT(DISTINCT user_id) AS n FROM best WHERE mission IN (${ph})`).bind(...ids).first();
+    out[line.id] = { crown: row ? { pseudo: row.pseudo, score: row.score, missions: row.n } : null, players: players.n };
+  }
+  return json({ lines: out });
+}
+
+async function boxEvent(env, user, items) {
+  for (const it of items) {
+    if (it.dup) continue;
+    if (it.type === 'rame' && (it.rarity === 'legendaire' || it.rarity === 'mythique')) {
+      await addEvent(env, 'loot', `✨ ${user.pseudo} a sorti la rame ${it.rarity === 'mythique' ? 'MYTHIQUE' : 'légendaire'} ${RAMES[it.id].name} !`);
+    }
+    if (it.type === 'livree' && it.rarity === 'mythique') await addEvent(env, 'loot', `✨ ${user.pseudo} a déniché la livrée ${LIVREES[it.id].name}.`);
+  }
+}
+

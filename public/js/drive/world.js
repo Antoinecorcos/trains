@@ -1,5 +1,5 @@
 // Vue de côté : ciel, décors en parallaxe selon le quartier, voie, caténaire, quais, Z 2N.
-import { STATIONS, PLATFORM, regionAt } from './route.js';
+import { PLATFORM, regionAt as regionOf, RAMES, LIVREES } from './route.js';
 
 const FONT = '"Nunito Sans", "Avenir Next", Avenir, "Segoe UI", sans-serif';
 const CAR = 26; // longueur d'une voiture (m)
@@ -61,7 +61,10 @@ export class World {
     this.railY = h * (this.portrait ? 0.62 : 0.72);
     const light = m.light;
     const rain = m.weather === 'rain';
+    this.snow = m.weather === 'snow';
     this.light = light;
+    this.route = m.route;
+    this.lineColor = m.route.line.color;
 
     let sx = 0;
     let sy = 0;
@@ -79,16 +82,19 @@ export class World {
     this.drawMid(light, rain);
     this.drawGround(run, light);
     this.drawCatenaryPoles(true);
+    this.drawTunnels(run, now);
     this.drawPlatforms(run, now, 'back');
     this.drawTrack(run);
     this.drawTrackside(run, now);
-    for (const g of ghosts) this.drawTrain(g.x, g.v ?? 0, run, now, { ghost: true, label: g.label });
-    this.drawTrain(run.x, run.v, run, now, {});
+    for (const g of ghosts) this.drawTrain(g.x, g.v ?? 0, run, now, { ghost: true, label: g.label, look: this.look(g.rame, g.livree) });
+    this.drawTrain(run.x, run.v, run, now, { look: this.look(run.serie.id, run.livree) });
     this.drawPlatforms(run, now, 'front');
     this.drawCatenaryWire();
     this.drawForeground(run);
+    this.drawBridges(run, now);
     this.drawWeather(run, rain, now);
     this.drawSparks(run);
+    if (this.snow) { ctx.fillStyle = 'rgba(220,230,245,0.12)'; ctx.fillRect(0, 0, w, h); }
 
     // Teinte d'ambiance (aube, nuit)
     if (light < 0.75) {
@@ -103,6 +109,15 @@ export class World {
   }
 
   X(wx) { return (wx - this.camX) * this.k; }
+
+  reg(wx) { return this.route ? regionOf(this.route, wx) : 'urban'; }
+
+  // Apparence d'une rame : modèle + livrée (la bande prend la couleur de la ligne par défaut)
+  look(rameId, livreeId) {
+    const r = RAMES[rameId] ?? RAMES.Z2N;
+    const l = LIVREES[livreeId] ?? {};
+    return { deck: r.deck, nose: r.nose, body: l.body ?? r.body, band: l.band ?? r.band ?? this.lineColor ?? U, doors: l.doors ?? r.doors, glow: !!l.glow, roof: r.rarity === 'mythique' ? '#8d949d' : '#c9ced6' };
+  }
 
   // Couche en parallaxe : appelle item(n, sx) pour chaque élément visible espacé de `spacing` m
   layer(par, spacingPx, salt, item) {
@@ -130,12 +145,18 @@ export class World {
     let bot = mix('#f0a070', '#cfe2f4', Math.max(0, (light - 0.35) / 0.65));
     if (light < 0.35) bot = mix('#3a2f6e', '#f0a070', light / 0.35);
     if (rain) { top = mix(top, '#5d6576', 0.65); bot = mix(bot, '#9aa2b0', 0.6); }
+    if (this.snow) { top = mix(top, '#8d97a8', 0.6); bot = mix(bot, '#e3e8ef', 0.7); }
     const g = ctx.createLinearGradient(0, 0, 0, this.railY);
     g.addColorStop(0, top);
     g.addColorStop(1, bot);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, w, h);
-    if (!rain) {
+    if (light < 0.25) {
+      // étoiles
+      ctx.fillStyle = `rgba(255,255,255,${(0.25 - light) * 3})`;
+      for (let i = 0; i < 60; i++) ctx.fillRect(hash(i, 91) * w, hash(i, 92) * this.railY * 0.7, 1.5, 1.5);
+    }
+    if (!rain && !this.snow) {
       // soleil bas sur l'horizon
       const sunY = lerp(this.railY * 0.95, this.railY * 0.25, light);
       const sg = ctx.createRadialGradient(w * 0.8, sunY, 0, w * 0.8, sunY, h * 0.6);
@@ -167,7 +188,7 @@ export class World {
     const col = rain ? '#6c7488' : mix(sky, '#27306a', 0.5);
     const lit = `rgba(255,236,170,${Math.max(0, 0.7 - light) * 0.5})`;
     this.layer(0.05, 38, 11, (n, x, r, wx) => {
-      const reg = regionAt(wx);
+      const reg = this.reg(wx);
       ctx.fillStyle = col;
       if (reg === 'defense') {
         const ht = (28 + r * 46) * u;
@@ -183,6 +204,24 @@ export class World {
         }
         ctx.fillStyle = lit;
         for (let yy = base - ht + 4; yy < base - 4; yy += 5) ctx.fillRect(x + 2, yy, wd - 4, 1.2);
+      } else if (reg === 'paris' || reg === 'eiffel' || reg === 'river') {
+        // immeubles haussmanniens et toits de zinc
+        const wd = (9 + r * 6) * u;
+        const ht = (12 + hash(n, 15) * 6) * u;
+        ctx.fillRect(x, base - ht, wd, ht);
+        ctx.beginPath();
+        ctx.moveTo(x - 1, base - ht);
+        ctx.lineTo(x + 1.5 * u, base - ht - 3 * u);
+        ctx.lineTo(x + wd - 1.5 * u, base - ht - 3 * u);
+        ctx.lineTo(x + wd + 1, base - ht);
+        ctx.fill();
+        ctx.fillRect(x + wd * 0.3, base - ht - 4.5 * u, 1.2 * u, 2 * u);
+        ctx.fillStyle = lit;
+        for (let yy = base - ht + 3; yy < base - 3; yy += 3.4 * u) ctx.fillRect(x + 2, yy, wd - 4, 1.2);
+      } else if (reg === 'chateau') {
+        ctx.beginPath();
+        ctx.ellipse(x, base, (14 + r * 8) * u, (8 + r * 7) * u, 0, Math.PI, 0);
+        ctx.fill();
       } else if (reg === 'forest') {
         ctx.beginPath();
         ctx.ellipse(x, base, (16 + r * 10) * u, (9 + r * 9) * u, 0, Math.PI, 0);
@@ -219,7 +258,51 @@ export class World {
     });
   }
 
+  // Monuments repérés sur le tracé : tour de fer au Champ de Mars, château aux terminus de l'ouest
+  drawLandmarks(light, rain) {
+    const { ctx } = this;
+    if (!this.route) return;
+    const u = this.railY / 100;
+    const base = this.railY - this.k * 1.0;
+    const sky = mix('#f0a070', '#cfe2f4', light);
+    const col = rain ? '#5d6578' : mix(sky, '#20285e', 0.62);
+    for (const st of this.route.stations) {
+      if (st.region !== 'eiffel' && st.region !== 'chateau') continue;
+      const x = this.w * 0.5 + (st.x - (this.camX + this.w / (2 * this.k))) * 0.12 * this.k;
+      if (x < -200 || x > this.w + 200) continue;
+      ctx.fillStyle = col;
+      ctx.strokeStyle = col;
+      if (st.region === 'eiffel') {
+        const H = 78 * u;
+        ctx.beginPath();
+        ctx.moveTo(x - 16 * u, base);
+        ctx.quadraticCurveTo(x - 6 * u, base - H * 0.35, x - 1.2 * u, base - H * 0.92);
+        ctx.lineTo(x + 1.2 * u, base - H * 0.92);
+        ctx.quadraticCurveTo(x + 6 * u, base - H * 0.35, x + 16 * u, base);
+        ctx.lineTo(x + 10 * u, base);
+        ctx.quadraticCurveTo(x, base - 14 * u, x - 10 * u, base);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillRect(x - 0.5 * u, base - H, 1 * u, H * 0.1);
+        ctx.fillRect(x - 9 * u, base - H * 0.3, 18 * u, 1.2 * u);
+        ctx.fillRect(x - 5 * u, base - H * 0.58, 10 * u, 1 * u);
+        if (light < 0.4) {
+          ctx.fillStyle = `rgba(255,200,90,${(0.4 - light) * 2})`;
+          for (let i = 0; i < 18; i++) ctx.fillRect(x - 10 * u + hash(i, 61) * 20 * u * (1 - hash(i, 62)), base - hash(i, 62) * H * 0.9, 2, 2);
+        }
+      } else {
+        const wd = 46 * u;
+        ctx.fillRect(x - wd / 2, base - 14 * u, wd, 14 * u);
+        for (const tx of [-wd / 2, wd / 2 - 5 * u, -2.5 * u]) {
+          ctx.fillRect(x + tx, base - 20 * u, 5 * u, 20 * u);
+          ctx.beginPath(); ctx.moveTo(x + tx - 0.5 * u, base - 20 * u); ctx.lineTo(x + tx + 2.5 * u, base - 25 * u); ctx.lineTo(x + tx + 5.5 * u, base - 20 * u); ctx.fill();
+        }
+      }
+    }
+  }
+
   drawMid(light, rain) {
+    this.drawLandmarks(light, rain);
     const { ctx } = this;
     const base = this.railY - this.k * 0.6;
     const u = this.railY / 100;
@@ -228,7 +311,7 @@ export class World {
     const green = rain ? '#3f5a4c' : mix('#1f3a2c', '#3f7a52', light);
     const greenHi = rain ? '#4d6a5a' : mix('#2a4a36', '#5a9a62', light);
     this.layer(0.3, 30, 21, (n, x, r, wx) => {
-      const reg = regionAt(wx);
+      const reg = this.reg(wx);
       const tree = reg === 'forest' || (reg === 'plain' && r > 0.45) || (reg === 'fields' && r > 0.7) || (reg === 'versailles' && r > 0.75);
       if (tree) {
         const s = (5 + r * 6) * u;
@@ -240,8 +323,9 @@ export class World {
         ctx.arc(x - s * 0.5, base - s * 1.05, s * 0.55, 0, Math.PI * 2);
         ctx.arc(x + s * 0.5, base - s * 1.1, s * 0.6, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = greenHi;
+        ctx.fillStyle = this.snow ? '#eef2f7' : greenHi;
         ctx.beginPath(); ctx.arc(x - s * 0.2, base - s * 1.65, s * 0.35, 0, Math.PI * 2); ctx.fill();
+        if (this.snow) { ctx.beginPath(); ctx.arc(x + s * 0.3, base - s * 1.3, s * 0.3, 0, Math.PI * 2); ctx.fill(); }
         return;
       }
       if (reg === 'fields') return;
@@ -249,7 +333,8 @@ export class World {
       const ht = (reg === 'defense' ? 16 : reg === 'newtown' ? 12 : 7) * u + r * (reg === 'defense' ? 22 : 10) * u;
       const wd = (8 + hash(n, 22) * 8) * u;
       ctx.fillRect(x, base - ht, wd, ht);
-      if (reg === 'urban' || reg === 'plain' || reg === 'versailles') {
+      if (this.snow) { ctx.fillStyle = '#e9eef5'; ctx.fillRect(x - 1, base - ht - 1.2 * u, wd + 2, 1.6 * u); ctx.fillStyle = dark; }
+      if (reg === 'urban' || reg === 'plain' || reg === 'versailles' || reg === 'paris' || reg === 'eiffel' || reg === 'river') {
         ctx.beginPath();
         ctx.moveTo(x - 1, base - ht);
         ctx.lineTo(x + wd * 0.5, base - ht - 4 * u);
@@ -269,21 +354,144 @@ export class World {
   }
 
   drawGround(run, light) {
-    const { ctx, w, h } = this;
+    const { ctx, w, h, k } = this;
     const y = this.railY;
-    const reg = regionAt(run.x);
-    const grass = reg === 'defense' || reg === 'urban' ? '#55606c' : mix('#3c5a3a', '#6f9a5a', light);
+    const reg = this.reg(run.x);
+    const town = reg === 'defense' || reg === 'urban' || reg === 'paris' || reg === 'eiffel' || reg === 'newtown';
+    let grass = town ? '#55606c' : mix('#3c5a3a', '#6f9a5a', light);
+    if (this.snow) grass = mix('#dfe6ee', '#f4f7fa', light);
+    // la Seine derrière la voie (quais du RER C, Chatou…)
+    if (reg === 'river') {
+      ctx.fillStyle = mix('#1d3557', '#4b7fae', light);
+      ctx.fillRect(0, y - k * 2.6, w, k * 2.0);
+      ctx.fillStyle = `rgba(255,255,255,${0.12 + light * 0.15})`;
+      this.layer(0.6, 26, 71, (n, x) => ctx.fillRect(x, y - k * (1.2 + hash(n, 72) * 1.2), k * (1 + hash(n, 73) * 2), 1.5));
+      ctx.fillStyle = '#7a756c';
+      ctx.fillRect(0, y - k * 0.75, w, k * 0.2);
+    }
     // remblai derrière la voie
     ctx.fillStyle = mix(grass, '#000000', 0.15);
-    ctx.fillRect(0, y - this.k * 0.6, w, this.k * 0.6);
+    ctx.fillRect(0, y - k * 0.6, w, k * 0.6);
     // ballast
-    ctx.fillStyle = '#6d6560';
-    ctx.fillRect(0, y, w, this.k * 0.9);
-    ctx.fillStyle = '#5a534e';
-    ctx.fillRect(0, y + this.k * 0.9, w, this.k * 0.35);
+    ctx.fillStyle = this.snow ? '#b9bfc6' : '#6d6560';
+    ctx.fillRect(0, y, w, k * 0.9);
+    ctx.fillStyle = this.snow ? '#a6adb5' : '#5a534e';
+    ctx.fillRect(0, y + k * 0.9, w, k * 0.35);
     // talus devant
     ctx.fillStyle = grass;
-    ctx.fillRect(0, y + this.k * 1.25, w, h - y);
+    ctx.fillRect(0, y + k * 1.25, w, h - y);
+  }
+
+  // Tunnels : vue en coupe, voûte éclairée, terre au-dessus
+  drawTunnels(run, now) {
+    const { ctx, k, h } = this;
+    const y = this.railY;
+    for (const t of this.route.tunnels) {
+      const a = this.X(t.from);
+      const b = this.X(t.to);
+      if (b < -k * 10 || a > this.w + k * 10) continue;
+      const roof = y - k * 7.4;
+      const ground = y - k * 9.5;
+      // masse de terre au-dessus et aux entrées
+      ctx.fillStyle = this.snow ? '#e6ebf1' : mix('#3b4a33', '#5d7a4c', this.light);
+      ctx.beginPath();
+      ctx.moveTo(a - k * 9, y);
+      ctx.lineTo(a - k * 2, ground);
+      ctx.lineTo(b + k * 2, ground);
+      ctx.lineTo(b + k * 9, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#4a3f35';
+      ctx.fillRect(a - k * 2, ground + k * 0.5, b - a + k * 4, y - ground - k * 0.5);
+      // intérieur
+      const g = ctx.createLinearGradient(0, roof, 0, y);
+      g.addColorStop(0, '#16181e');
+      g.addColorStop(1, '#2c2f37');
+      ctx.fillStyle = g;
+      ctx.fillRect(a, roof, b - a, y - roof + k * 1.3);
+      ctx.fillStyle = '#0c0d11';
+      ctx.fillRect(a, roof - k * 0.4, b - a, k * 0.6);
+      // chemins de câbles et lampes
+      ctx.fillStyle = '#3b3f48';
+      ctx.fillRect(a, y - k * 2.9, b - a, Math.max(1.5, k * 0.12));
+      ctx.fillRect(a, y - k * 3.3, b - a, Math.max(1.5, k * 0.12));
+      for (let wx = Math.ceil(t.from / 22) * 22; wx < t.to; wx += 22) {
+        const x = this.X(wx);
+        if (x < -20 || x > this.w + 20) continue;
+        const lg = ctx.createRadialGradient(x, roof + k * 0.6, 0, x, roof + k * 0.6, k * 5);
+        lg.addColorStop(0, 'rgba(255,214,140,0.35)');
+        lg.addColorStop(1, 'rgba(255,214,140,0)');
+        ctx.fillStyle = lg;
+        ctx.fillRect(x - k * 5, roof, k * 10, k * 6);
+        ctx.fillStyle = '#ffe2a8';
+        ctx.fillRect(x - k * 0.5, roof + k * 0.4, k, Math.max(2, k * 0.2));
+      }
+      // têtes de tunnel en béton
+      for (const [x, dir] of [[a, -1], [b, 1]]) {
+        if (x < -k * 4 || x > this.w + k * 4) continue;
+        ctx.fillStyle = '#8b8e93';
+        ctx.fillRect(dir < 0 ? x - k * 1.6 : x, ground + k * 0.3, k * 1.6, y - ground);
+        ctx.fillStyle = '#6f7277';
+        ctx.fillRect(dir < 0 ? x - k * 2.2 : x - k * 0.6, ground, k * 2.8, k * 0.6);
+      }
+    }
+    void now; void h;
+  }
+
+  // Ponts sur la Seine : eau, piles et poutres métalliques
+  drawBridges(run, now) {
+    const { ctx, k, h } = this;
+    const y = this.railY;
+    for (const br of this.route.bridges) {
+      const a = this.X(br.from);
+      const b = this.X(br.to);
+      if (b < -k * 20 || a > this.w + k * 20) continue;
+      const water = mix('#1d3557', '#4b7fae', this.light);
+      ctx.fillStyle = mix(water, '#000000', 0.15);
+      ctx.beginPath();
+      ctx.moveTo(a - k * 14, y + k * 1.3);
+      ctx.lineTo(a - k * 2, y + k * 4.5);
+      ctx.lineTo(a - k * 2, h);
+      ctx.lineTo(b + k * 2, h);
+      ctx.lineTo(b + k * 2, y + k * 4.5);
+      ctx.lineTo(b + k * 14, y + k * 1.3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = water;
+      ctx.fillRect(a - k * 2, y + k * 4.5, b - a + k * 4, h - y);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      for (let i = 0; i < 14; i++) {
+        const wx = a + ((hash(i, 81) * (b - a + k * 4) + now * 0.02 * (i % 3 + 1)) % (b - a + k * 4));
+        ctx.fillRect(wx, y + k * (5 + hash(i, 82) * 6), k * (1 + hash(i, 83) * 2), 1.5);
+      }
+      // piles
+      for (let wx = br.from + 35; wx < br.to - 20; wx += 45) {
+        const x = this.X(wx);
+        ctx.fillStyle = '#8a8178';
+        ctx.fillRect(x - k * 1.2, y + k * 1.2, k * 2.4, h - y);
+        ctx.fillStyle = '#756d65';
+        ctx.fillRect(x - k * 1.5, y + k * 1.0, k * 3, k * 0.5);
+      }
+      // tablier en treillis
+      ctx.fillStyle = '#3f4650';
+      ctx.fillRect(a, y + k * 0.15, b - a, k * 1.1);
+      ctx.strokeStyle = '#5b6470';
+      ctx.lineWidth = Math.max(1, k * 0.12);
+      ctx.beginPath();
+      for (let wx = br.from; wx < br.to; wx += 4) {
+        const x = this.X(wx);
+        ctx.moveTo(x, y + k * 0.2);
+        ctx.lineTo(this.X(wx + 2), y + k * 1.2);
+        ctx.lineTo(this.X(wx + 4), y + k * 0.2);
+      }
+      ctx.stroke();
+      // garde-corps devant la voie
+      ctx.strokeStyle = '#2b3038';
+      ctx.beginPath();
+      ctx.moveTo(a, y - k * 0.9);
+      ctx.lineTo(b, y - k * 0.9);
+      ctx.stroke();
+    }
   }
 
   drawTrack(run) {
@@ -486,15 +694,29 @@ export class World {
   drawPlatforms(run, now, part) {
     const { ctx, k } = this;
     const y = this.railY;
-    for (let si = 0; si < STATIONS.length; si++) {
-      const st = STATIONS[si];
+    for (const st of this.route.stations) {
       const a = this.X(st.x - PLATFORM);
       const b = this.X(st.x + 8);
       if (b < -50 || a > this.w + 50) continue;
-      const stopIdx = run.m.stops.findIndex((s) => s.k === si);
+      const stopIdx = run.m.stops.findIndex((s) => s.k === st.k);
       const isStop = stopIdx >= 0;
       if (part === 'back') {
-        // abri vitré et panneaux de gare derrière la voie
+        if (st.under) {
+          // quai souterrain : mur carrelé blanc et bandeau lumineux
+          ctx.fillStyle = '#d9dde2';
+          ctx.fillRect(a, y - k * 6.6, b - a, k * 6.6);
+          ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let yy = y - k * 6.6; yy < y; yy += k * 0.5) { ctx.moveTo(a, yy); ctx.lineTo(b, yy); }
+          ctx.stroke();
+          ctx.fillStyle = '#fff6d8';
+          ctx.fillRect(a, y - k * 6.9, b - a, k * 0.35);
+          ctx.fillStyle = this.lineColor;
+          ctx.fillRect(a, y - k * 1.8, b - a, k * 0.3);
+          continue;
+        }
+        // abri vitré derrière la voie
         ctx.fillStyle = 'rgba(160,190,220,0.35)';
         for (let wx = st.x - PLATFORM + 30; wx < st.x - 20; wx += 55) {
           const x = this.X(wx);
@@ -503,39 +725,47 @@ export class World {
           ctx.fillRect(x - 2, y - k * 3.8, k * 9 + 4, k * 0.3);
           ctx.fillStyle = 'rgba(160,190,220,0.35)';
         }
+        // réverbères allumés la nuit
+        if (this.light < 0.45) {
+          for (let wx = st.x - PLATFORM + 10; wx < st.x; wx += 30) {
+            const x = this.X(wx);
+            const lg = ctx.createRadialGradient(x, y - k * 4.6, 0, x, y - k * 4.6, k * 6);
+            lg.addColorStop(0, 'rgba(255,220,150,0.4)');
+            lg.addColorStop(1, 'rgba(255,220,150,0)');
+            ctx.fillStyle = lg;
+            ctx.fillRect(x - k * 6, y - k * 10, k * 12, k * 10);
+          }
+        }
         continue;
       }
       // dalle de quai devant la voie
       const top = y + k * 0.15;
-      ctx.fillStyle = '#8f949a';
+      ctx.fillStyle = this.snow && !st.under ? '#d6dce3' : '#8f949a';
       ctx.fillRect(a, top, b - a, k * 1.4);
-      ctx.fillStyle = '#b8bcc2';
+      ctx.fillStyle = this.snow && !st.under ? '#f2f5f8' : '#b8bcc2';
       ctx.fillRect(a, top, b - a, k * 0.32);
       ctx.fillStyle = '#ffd200';
       ctx.fillRect(a, top + k * 0.32, b - a, Math.max(2, k * 0.12));
       ctx.fillStyle = '#6c7177';
       ctx.fillRect(a, top + k * 1.4, b - a, k * 0.25);
-      // panneaux de nom de gare sur le quai
       for (const wx of [st.x - PLATFORM + 14, st.x - PLATFORM * 0.5]) this.stationSign(this.X(wx), top - k * 3.1, st.name);
-      // repère d'arrêt (en bout de quai)
       const mx = this.X(st.x);
       if (isStop) {
         ctx.fillStyle = '#2b2f36';
         ctx.fillRect(mx - 1, top - k * 2.6, 2, k * 2.6);
-        const s = Math.max(12, k * 1.2);
+        const sz = Math.max(12, k * 1.2);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(mx - s / 2, top - k * 2.6 - s, s, s);
-        ctx.fillStyle = U;
+        ctx.fillRect(mx - sz / 2, top - k * 2.6 - sz, sz, sz);
+        ctx.fillStyle = this.lineColor;
         ctx.beginPath();
-        ctx.moveTo(mx - s * 0.32, top - k * 2.6 - s * 0.72);
-        ctx.lineTo(mx + s * 0.32, top - k * 2.6 - s * 0.72);
-        ctx.lineTo(mx, top - k * 2.6 - s * 0.18);
+        ctx.moveTo(mx - sz * 0.32, top - k * 2.6 - sz * 0.72);
+        ctx.lineTo(mx + sz * 0.32, top - k * 2.6 - sz * 0.72);
+        ctx.lineTo(mx, top - k * 2.6 - sz * 0.18);
         ctx.fill();
         ctx.fillStyle = '#ffd200';
         ctx.fillRect(mx - 1, top, 3, k * 0.32);
+        this.people(run, stopIdx, st, top, now);
       }
-      // voyageurs
-      if (isStop) this.people(run, stopIdx, st, top, now);
     }
   }
 
@@ -622,25 +852,34 @@ export class World {
     const { ctx, k } = this;
     const y = this.railY;
     const ghost = opts.ghost;
+    const L = opts.look ?? this.look('Z2N');
     if (this.X(nose) < -10 || this.X(nose - CAR * CARS) > this.w + 10) return;
     ctx.save();
-    if (ghost) ctx.globalAlpha = 0.22;
-    const night = this.light < 0.6;
+    if (ghost) ctx.globalAlpha = 0.24;
+    const night = this.light < 0.6 || this.route.tunnels.some((t) => nose > t.from && nose - CAR * CARS < t.to);
     const doorsF = !ghost && run.doors && run.phase !== 'run' ? doorFraction(run) : 0;
+    const bodyTop = y - k * (L.deck === 2 ? 4.35 : 3.9);
+    const bodyBot = y - k * 0.95;
     for (let c = 0; c < CARS; c++) {
       const x1 = this.X(nose - c * CAR);
       const x0 = this.X(nose - (c + 1) * CAR) + k * 0.6;
       if (x1 < -5 || x0 > this.w + 5) continue;
-      const bodyTop = y - k * 4.35;
-      const bodyBot = y - k * 0.95;
       const front = c === 0;
-      // caisse
-      ctx.fillStyle = ghost ? '#bcd0ff' : '#eef1f5';
+      // caisse et nez
+      ctx.fillStyle = L.body;
       ctx.beginPath();
       ctx.moveTo(x0, bodyBot);
       ctx.lineTo(x0, bodyTop + k * 0.3);
       ctx.quadraticCurveTo(x0, bodyTop, x0 + k * 0.4, bodyTop);
-      if (front) {
+      if (front && L.nose === 'sharp') {
+        ctx.lineTo(x1 - k * 3.6, bodyTop);
+        ctx.quadraticCurveTo(x1 - k * 0.6, bodyTop + k * 0.5, x1, bodyTop + k * 2.6);
+        ctx.lineTo(x1, bodyBot);
+      } else if (front && L.nose === 'flat') {
+        ctx.lineTo(x1 - k * 1.1, bodyTop);
+        ctx.quadraticCurveTo(x1 - k * 0.1, bodyTop + k * 0.1, x1, bodyTop + k * 1.0);
+        ctx.lineTo(x1, bodyBot);
+      } else if (front) {
         ctx.lineTo(x1 - k * 2.2, bodyTop);
         ctx.quadraticCurveTo(x1 - k * 0.2, bodyTop + k * 0.4, x1, bodyTop + k * 2.0);
         ctx.lineTo(x1, bodyBot);
@@ -651,22 +890,25 @@ export class World {
       }
       ctx.closePath();
       ctx.fill();
-      if (ghost) { ctx.globalAlpha = 0.7; ctx.setLineDash([5, 4]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.22; continue; }
+      if (ghost) { ctx.globalAlpha = 0.7; ctx.setLineDash([5, 4]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.24; }
       // jupe et toit
       ctx.fillStyle = '#3a3f4a';
       ctx.fillRect(x0, bodyBot - k * 0.45, x1 - x0, k * 0.45);
-      ctx.fillStyle = '#c9ced6';
+      ctx.fillStyle = L.roof;
       ctx.fillRect(x0 + k * 0.4, bodyTop - k * 0.18, x1 - x0 - k * (front ? 2.6 : 0.8), k * 0.2);
-      // bande de ligne
-      ctx.fillStyle = U;
-      ctx.fillRect(x0, y - k * 2.45, x1 - x0 - (front ? k * 0.1 : 0), k * 0.32);
-      // baies vitrées (deux niveaux)
+      // bande de livrée
+      ctx.save();
+      if (L.glow) { ctx.shadowColor = L.band; ctx.shadowBlur = 10; }
+      ctx.fillStyle = L.band;
+      ctx.fillRect(x0, L.deck === 2 ? y - k * 2.45 : y - k * 1.75, x1 - x0 - (front ? k * 0.1 : 0), k * 0.32);
+      ctx.restore();
+      // baies vitrées
       const glass = night ? '#ffe6a6' : '#26324a';
       const doors = [nose - c * CAR - 6.5, nose - c * CAR - 19.5];
-      for (const level of [0, 1]) {
-        const wy = level ? bodyTop + k * 0.55 : y - k * 2.0;
-        const wh = k * 0.95;
-        for (let wx = nose - (c + 1) * CAR + 1.4; wx < nose - c * CAR - (front ? 3.4 : 1); wx += 2.15) {
+      const rows = L.deck === 2 ? [[bodyTop + k * 0.55, k * 0.95], [y - k * 2.0, k * 0.95]] : [[bodyTop + k * 0.6, k * 1.5]];
+      const endPad = front ? (L.nose === 'sharp' ? 4.4 : L.nose === 'flat' ? 2.2 : 3.4) : 1;
+      for (const [wy, wh] of rows) {
+        for (let wx = nose - (c + 1) * CAR + 1.4; wx < nose - c * CAR - endPad; wx += 2.15) {
           if (doors.some((d) => Math.abs(wx + 0.8 - d) < 1.7)) continue;
           const sx = this.X(wx);
           ctx.fillStyle = glass;
@@ -688,7 +930,7 @@ export class World {
           ctx.fillStyle = night ? 'rgba(255,220,150,0.9)' : 'rgba(255,236,190,0.55)';
           ctx.fillRect(dx - open, bodyTop + k * 0.6, open * 2, bodyBot - bodyTop - k * 0.7);
         }
-        ctx.fillStyle = '#8a1440';
+        ctx.fillStyle = L.doors;
         ctx.fillRect(dx - dw / 2 - open, bodyTop + k * 0.5, dw / 2, bodyBot - bodyTop - k * 0.5);
         ctx.fillRect(dx + open, bodyTop + k * 0.5, dw / 2, bodyBot - bodyTop - k * 0.5);
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
@@ -730,24 +972,35 @@ export class World {
       if (front) {
         ctx.fillStyle = '#1d2533';
         ctx.beginPath();
-        ctx.moveTo(x1 - k * 2.0, bodyTop + k * 0.35);
-        ctx.quadraticCurveTo(x1 - k * 0.5, bodyTop + k * 0.55, x1 - k * 0.15, bodyTop + k * 1.9);
-        ctx.lineTo(x1 - k * 2.0, bodyTop + k * 1.9);
+        if (L.nose === 'sharp') {
+          ctx.moveTo(x1 - k * 3.3, bodyTop + k * 0.3);
+          ctx.quadraticCurveTo(x1 - k * 1.2, bodyTop + k * 0.6, x1 - k * 0.35, bodyTop + k * 2.2);
+          ctx.lineTo(x1 - k * 3.3, bodyTop + k * 2.2);
+        } else if (L.nose === 'flat') {
+          ctx.moveTo(x1 - k * 1.5, bodyTop + k * 0.35);
+          ctx.lineTo(x1 - k * 0.2, bodyTop + k * 0.5);
+          ctx.lineTo(x1 - k * 0.1, bodyTop + k * 1.8);
+          ctx.lineTo(x1 - k * 1.5, bodyTop + k * 1.8);
+        } else {
+          ctx.moveTo(x1 - k * 2.0, bodyTop + k * 0.35);
+          ctx.quadraticCurveTo(x1 - k * 0.5, bodyTop + k * 0.55, x1 - k * 0.15, bodyTop + k * 1.9);
+          ctx.lineTo(x1 - k * 2.0, bodyTop + k * 1.9);
+        }
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = '#ffd200';
         ctx.fillRect(x1 - k * 0.5, bodyBot - k * 1.1, k * 0.5, k * 0.6);
-        // phares
         const hl = { x: x1 - k * 0.15, y: bodyBot - k * 1.5 };
         ctx.fillStyle = '#fffbe6';
         ctx.beginPath(); ctx.arc(hl.x, hl.y, k * 0.18, 0, Math.PI * 2); ctx.fill();
-        const g = ctx.createRadialGradient(hl.x, hl.y, 0, hl.x, hl.y, k * (night ? 12 : 4));
+        const reach = k * (night ? 12 : 4);
+        const g = ctx.createRadialGradient(hl.x, hl.y, 0, hl.x, hl.y, reach);
         g.addColorStop(0, `rgba(255,244,200,${night ? 0.55 : 0.35})`);
         g.addColorStop(1, 'rgba(255,244,200,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.moveTo(hl.x, hl.y);
-        ctx.arc(hl.x, hl.y, k * (night ? 12 : 4), -0.35, 0.35);
+        ctx.arc(hl.x, hl.y, reach, -0.35, 0.35);
         ctx.fill();
       }
     }
@@ -756,7 +1009,7 @@ export class World {
       const x = this.X(nose);
       if (x > 0 && x < this.w) {
         ctx.font = `800 ${Math.max(10, k)}px ${FONT}`;
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.textAlign = 'right';
         ctx.fillText(opts.label, x - 4, y - k * 4.8);
       }
@@ -767,7 +1020,7 @@ export class World {
   drawForeground(run) {
     const { ctx, k, w, h } = this;
     const y = this.railY + k * 1.7;
-    const reg = regionAt(run.x);
+    const reg = this.reg(run.x);
     const urban = reg === 'defense' || reg === 'urban' || reg === 'newtown';
     // bande de terrain devant : chemin de service et clôture
     ctx.fillStyle = urban ? '#4a5058' : '#7a6a52';
@@ -810,6 +1063,14 @@ export class World {
         ctx.lineTo(x - 3 - drift, y + 12 * d.l);
       }
       ctx.stroke();
+    }
+    if (this.snow) {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (const d of this.rain) {
+        const x = ((d.x * w - now * 0.03 - run.x * this.k * 0.4 + Math.sin(now / 600 + d.l * 9) * 12) % w + w) % w;
+        const y = ((d.y * h + now * 0.05 * (0.6 + d.l * 0.4)) % h);
+        ctx.fillRect(x, y, 2 + d.l, 2 + d.l);
+      }
     }
     const inLeaves = run.m.leaves.some((z) => run.x > z.from - 60 && run.x < z.to + 30);
     if (inLeaves) {

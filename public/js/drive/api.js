@@ -84,9 +84,16 @@ export const api = {
 
   get loggedIn() { return this.online && !!this.user && !!this.token; },
 
-  submitRun: (mission, log) => api.call('/api/runs', { method: 'POST', body: { mission, log } }),
+  submitRun: (mission, log, gear) => api.call('/api/runs', { method: 'POST', body: { mission, log, rame: gear?.rame?.id, livree: gear?.livree } }),
   leaderboard: (mission) => api.call(`/api/leaderboard?mission=${encodeURIComponent(mission)}`),
   ghost: (mission, pseudo) => api.call(`/api/ghost?mission=${encodeURIComponent(mission)}&pseudo=${encodeURIComponent(pseudo)}`),
   feed: () => api.call('/api/feed'),
   ranking: () => api.call('/api/ranking'),
+  lines: () => api.call('/api/lines'),
+  profile: () => api.call('/api/profile'),
+  equip: (what) => api.call('/api/equip', { method: 'POST', body: what }),
+  openBox: (kind) => api.call('/api/box/open', { method: 'POST', body: { kind } }),
+  buyBox: (kind) => api.call('/api/box/buy', { method: 'POST', body: { kind } }),
+  upgrade: (rame) => api.call('/api/rame/upgrade', { method: 'POST', body: { rame } }),
+  daily: () => api.call('/api/daily', { method: 'POST' }),
 };

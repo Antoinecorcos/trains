@@ -1,10 +1,9 @@
 // Simulation déterministe de la conduite (pas fixe de 1/60 s).
 // Même code pour le joueur, le conducteur titulaire (IA) et, plus tard, la vérification serveur.
 
-import { buildMission, SERIES, PLATFORM, TRAIN_LEN } from './route.js';
+import { buildMission, rameStats, PLATFORM, TRAIN_LEN } from './route.js';
 
 export const DT = 1 / 60;
-const LINE_LIMIT = 100;
 const STOP_WINDOW = [-25, 6];
 const FU = 2.6; // freinage d'urgence (m/s²)
 
@@ -18,7 +17,9 @@ export const GRADES = [
 
 export function createRun(mission, opts = {}) {
   const m = buildMission(mission);
-  const serie = SERIES['Z 2N'];
+  // Rame choisie (le défi du jour impose la sienne : tout le monde à armes égales)
+  const pick = mission.fixedRame ? { id: mission.fixedRame, level: 1 } : (opts.rame ?? { id: 'Z2N', level: 1 });
+  const serie = rameStats(pick.id, pick.level);
   const r = {
     m,
     serie,
@@ -64,7 +65,7 @@ export function createRun(mission, opts = {}) {
 // ---------------------------------------------------------------------------
 
 export function limitAt(r, x) {
-  let l = LINE_LIMIT;
+  let l = r.m.lineLimit ?? 100;
   for (const z of r.m.limits) if (x >= z.from && x <= z.to + TRAIN_LEN * 0.5) l = Math.min(l, z.kmh);
   return l;
 }
@@ -90,7 +91,7 @@ export function nextSignal(r) {
 }
 
 export function adhesionAt(r, x) {
-  let a = r.m.weather === 'rain' ? 0.72 : 1;
+  let a = r.m.weather === 'rain' ? 0.72 : r.m.weather === 'snow' ? 0.6 : 1;
   for (const z of r.m.leaves) if (x >= z.from && x <= z.to) a = Math.min(a, 0.45);
   return a;
 }
@@ -142,7 +143,7 @@ function drive(r, hornEdge) {
   const { serie } = r;
   const limit = limitAt(r, r.x) / 3.6;
   const adh = adhesionAt(r, r.x);
-  const cap = 1.6 * adh;
+  const cap = 1.6 * adh * serie.grip;
 
   // Contrôle de vitesse (KVB)
   if (r.v > limit + 10 / 3.6 && !r.kvb) {
@@ -311,7 +312,7 @@ function updateDoors(r, input) {
   const age = r.t - dr.t;
   if (dr.state === 'opening' && age > 0.6) { dr.state = 'open'; dr.t = r.t; }
   if (dr.state === 'open') {
-    const rate = dr.last ? 40 : 16;
+    const rate = dr.last ? 40 : r.serie.board;
     dr.boarded = Math.min(dr.pax, dr.boarded + rate * DT);
     if (dr.boarded >= dr.pax && dr.fullAt == null) {
       dr.fullAt = r.t;
@@ -391,7 +392,7 @@ export function result(r) {
   const score = Math.round(r.score);
   const stars = 1 + (score >= ref * 0.55 ? 1 : 0) + (score >= ref * 0.8 ? 1 : 0);
   return {
-    score, stars, ref,
+    score, stars, ref, rame: r.serie.id, level: r.serie.level,
     time: r.t,
     parts: { ...r.parts },
     comfort: Math.max(0, Math.round(r.comfort)),
@@ -467,8 +468,8 @@ export function record(log, input) {
   log.n++;
 }
 
-export function replay(mission, sched, log) {
-  const r = createRun(mission, { sched });
+export function replay(mission, sched, log, rame) {
+  const r = createRun(mission, { sched, rame });
   const horn = new Set(log.h);
   const close = new Set(log.c);
   let li = 0;

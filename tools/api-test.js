@@ -52,3 +52,28 @@ const fd = await call('/api/feed');
 console.log('feed', fd.data.events.slice(0, 4).map((e) => e.text));
 const rk = await call('/api/ranking');
 console.log('ranking', rk.data.players.slice(0, 3));
+
+// ---- Économie : profil, cadeau quotidien, boîtes, équipement, amélioration ----
+const tok = a.data.token;
+let prof = await call('/api/profile', {}, tok);
+console.log('profile', prof.status, { tickets: prof.data.tickets, parts: prof.data.parts, rames: prof.data.rames, boxes: prof.data.boxes, equip: prof.data.equip });
+const daily = await call('/api/daily', { method: 'POST' }, tok);
+console.log('daily', daily.status, daily.data.gift);
+const daily2 = await call('/api/daily', { method: 'POST' }, tok);
+console.log('daily again', daily2.status, daily2.data.error);
+for (const kind of ['standard', 'standard', 'rare']) {
+  const o = await call('/api/box/open', { method: 'POST', body: JSON.stringify({ kind }) }, tok);
+  console.log('open', kind, o.status, o.data.items ?? o.data.error);
+}
+const buy = await call('/api/box/buy', { method: 'POST', body: JSON.stringify({ kind: 'legendaire' }) }, tok);
+console.log('buy legendaire (trop cher ?)', buy.status, buy.data.error ?? 'ok');
+const eqBad = await call('/api/equip', { method: 'POST', body: JSON.stringify({ rame: 'Z6100' }) }, tok);
+console.log('equip non possédée', eqBad.status, eqBad.data.error ?? 'possédée');
+const runBad = await call('/api/runs', { method: 'POST', body: JSON.stringify({ mission: 'm1', log: good.log, rame: 'RERNG' }) }, tok);
+console.log('run avec rame non possédée', runBad.status, runBad.data.error ?? runBad.data.score);
+const up = await call('/api/rame/upgrade', { method: 'POST', body: JSON.stringify({ rame: 'Z2N' }) }, tok);
+console.log('upgrade Z2N', up.status, up.data.level ?? up.data.error);
+const lines = await call('/api/lines');
+console.log('lines', JSON.stringify(lines.data.lines));
+prof = await call('/api/profile', {}, tok);
+console.log('profile after', { tickets: prof.data.tickets, parts: prof.data.parts, rames: prof.data.rames.length, livrees: prof.data.livrees, boxes: prof.data.boxes });

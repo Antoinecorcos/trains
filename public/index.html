@@ -25,7 +25,7 @@
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>
       </button>
       <div class="top-mid">
-        <div class="top-title"><span class="pict">U</span><b id="mission-title">Mission</b><span id="clock" class="top-clock">07:41:00</span></div>
+        <div class="top-title"><span class="pict" id="line-pict">U</span><b id="mission-title">Mission</b><span id="clock" class="top-clock">07:41:00</span></div>
         <div id="strip" class="strip"></div>
       </div>
       <div class="top-score">
@@ -76,31 +76,25 @@
     </section>
   </section>
 
-  <!-- Tableau des départs : choix de mission -->
-  <div id="screen-start" class="screen board-screen">
-    <div class="board">
-      <div class="board-head">
-        <div>
-          <h1 class="board-title">Départs</h1>
-          <p class="board-sub"><i>Conduite</i> · Ligne U</p>
-        </div>
-        <div class="board-brand"><span class="pict pict-lg">U</span><span class="board-name">Ukipu</span></div>
-      </div>
-      <div id="account" class="account"></div>
-      <div id="missions"></div>
-      <div id="feed" class="feed" hidden></div>
-      <div class="board-foot">
-        <span id="stars-total" class="best"></span>
-        <span class="howto">Pupitre : <b>manipulateur</b> à droite (haut = traction, bas = freinage) · <b>Klaxon</b> · <b>Portes</b></span>
-        <a class="switch" href="regulation.html">Mode régulation (prototype) ›</a>
-      </div>
+  <!-- Accueil : réseau, départs, dépôt, classement -->
+  <div id="screen-start" class="screen home-screen">
+    <div class="home">
+      <header class="home-head">
+        <div class="board-brand"><span class="pict pict-md">U</span><span class="board-name">Ukipu</span></div>
+        <button id="wallet" class="wallet" type="button" hidden></button>
+      </header>
+      <main id="home-body" class="home-body"></main>
+      <nav id="tabs" class="tabs" aria-label="Navigation">
+        <button type="button" data-tab="reseau"><span class="t-ico">◎</span>Réseau</button>
+        <button type="button" data-tab="departs"><span class="t-ico">≡</span>Départs</button>
+        <button type="button" data-tab="depot"><span class="t-ico">▣</span>Dépôt</button>
+        <button type="button" data-tab="classement"><span class="t-ico">♛</span>Classement</button>
+      </nav>
     </div>
   </div>
 
-  <!-- Classement général -->
-  <div id="screen-ranking" class="screen" hidden>
-    <div class="board board-small" id="ranking"></div>
-  </div>
+  <!-- Ouverture de colis -->
+  <div id="screen-box" class="screen box-screen" hidden></div>
 
   <!-- Fiche mission -->
   <div id="screen-brief" class="screen" hidden>

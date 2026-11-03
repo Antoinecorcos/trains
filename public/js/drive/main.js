@@ -1,11 +1,12 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
-import { MISSIONS, dailyMission, STATIONS, PLATFORM } from './route.js';
+import { MISSIONS, dailyMission, PLATFORM, lineOf, buildRoute } from './route.js';
 import {
   DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { api } from './api.js';
+import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen } from './home.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -36,6 +37,7 @@ let toastTimer = 0;
 let runLog = null;
 let ghostChoice = null; // { type: 'titulaire' | 'me' | 'player', pseudo }
 let starting = false;
+let runGear = null;
 const schedCache = {};
 const tips = store.get('ukipu.drive.tips', {});
 
@@ -45,7 +47,12 @@ const ghostKey = (id) => (api.loggedIn ? `ukipu.drive.ghost.u.${api.user.pseudo.
 const progress = () => store.get(progKey(), {});
 const syncProgress = () => { if (api.loggedIn && api.progress) store.set(progKey(), api.progress); };
 const totalStars = () => Object.entries(progress()).filter(([id]) => !id.startsWith('daily')).reduce((s, [, p]) => s + (p.stars || 0), 0);
-const unlocked = (m) => totalStars() >= m.need || (m.daily && Object.keys(progress()).some((id) => !id.startsWith('daily')));
+// Mission suivante ouverte sur la même ligne
+const nextMission = () => {
+  const list = MISSIONS.filter((m) => m.line === (mission?.line ?? 'U'));
+  const i = list.findIndex((m) => m.id === mission?.id);
+  return list.slice(i + 1).find((m) => missionOpen(m)) ?? null;
+};
 const fmtClock = (t, sec = true) => {
   const s = Math.floor(t);
   const hh = String(Math.floor(s / 3600) % 24).padStart(2, '0');
@@ -57,37 +64,6 @@ const fmtClock = (t, sec = true) => {
 // ---------------------------------------------------------------------------
 // Tableau des départs
 // ---------------------------------------------------------------------------
-
-function showBoard() {
-  running = false;
-  for (const id of ['screen-brief', 'screen-pause', 'screen-end']) $(id).hidden = true;
-  const prog = progress();
-  $('missions').innerHTML = allMissions().map((m) => {
-    const p = prog[m.id];
-    const open = unlocked(m);
-    const stars = p ? p.stars : 0;
-    const kind = m.daily ? 'Défi du jour' : m.stops ? 'Semi-direct' : 'Omnibus';
-    const right = !open
-      ? `<span class="pill pill-off">${m.daily ? 'Après 1 mission' : `${m.need} ★ requises`}</span>`
-      : p ? `<span class="row-stars">${'★'.repeat(stars)}<span class="off">${'★'.repeat(3 - stars)}</span></span><span class="row-type">${fr0.format(p.score)} pts</span>`
-        : `<span class="pill ${m.daily ? 'pill-led' : 'pill-ok'}">${m.daily ? 'Aujourd\'hui' : 'Nouveau'}</span>`;
-    return `
-      <button class="row${open ? '' : ' row-locked'}${m.daily ? ' row-daily' : ''}" type="button" data-mission="${m.id}" ${open ? '' : 'aria-disabled="true"'}>
-        <span class="row-time">${fmtClock(m.clock[0] * 3600 + m.clock[1] * 60, false)}</span>
-        <span class="row-mid">
-          <span class="row-type">${kind} · ${m.stops ? m.stops.length : m.to - m.from} arrêts</span>
-          <span class="row-dest">${m.title}</span>
-          <span class="row-via">${STATIONS[m.from].name} › ${STATIONS[m.to].name}</span>
-        </span>
-        <span class="row-end">${right}</span>
-      </button>`;
-  }).join('');
-  const t = totalStars();
-  $('stars-total').textContent = t ? `${t} ★ gagnées sur la ligne U` : 'Commence par « Premiers pas ».';
-  $('screen-start').hidden = false;
-  renderAccount();
-  renderFeed();
-}
 
 // ---------------------------------------------------------------------------
 // Compte, fil d'actu, classement général
@@ -110,12 +86,10 @@ function renderAccount() {
         <span class="row-time small">Agent</span>
         <span class="row-mid"><span class="row-dest">${esc(api.user.pseudo)}</span><span class="row-type">Tes parties comptent au classement</span></span>
         <span class="acc-btns">
-          <button class="pill pill-ok" type="button" id="btn-ranking">Classement</button>
           <button class="pill pill-off" type="button" id="btn-logout">Déconnexion</button>
         </span>
       </div>`;
-    $('btn-ranking').onclick = showRanking;
-    $('btn-logout').onclick = async () => { await api.logout(); showBoard(); };
+    $('btn-logout').onclick = async () => { await api.logout(); home.profile = null; showHome('reseau'); };
     return;
   }
   el.innerHTML = `
@@ -130,8 +104,7 @@ function renderAccount() {
         <button class="ghost-btn small" type="button" id="btn-register">Créer mon compte</button>
       </div>
       <p class="acc-err" id="acc-err" role="alert"></p>
-    </form>
-    <button class="row row-plain" type="button" id="btn-ranking"><span class="row-mid"><span class="row-dest" style="font-size:16px">Voir le classement général ›</span></span></button>`;
+    </form>`;
   const go = async (mode) => {
     const pseudo = $('acc-pseudo').value.trim();
     const pass = $('acc-pass').value;
@@ -140,15 +113,15 @@ function renderAccount() {
       if (mode === 'register') await api.register(pseudo, pass); else await api.login(pseudo, pass);
       store.set('ukipu.pseudo', api.user.pseudo);
       syncProgress();
-      toast(mode === 'register' ? `Bienvenue ${api.user.pseudo} !` : `Bon retour ${api.user.pseudo}`);
-      showBoard();
+      await refreshProfile();
+      toast(mode === 'register' ? `Bienvenue ${api.user.pseudo} ! Un colis t'attend au dépôt.` : `Bon retour ${api.user.pseudo}`);
+      showHome('reseau');
     } catch (e) {
       $('acc-err').textContent = e.message;
     }
   };
   $('acc-form').onsubmit = (e) => { e.preventDefault(); go('login'); };
   $('btn-register').onclick = () => go('register');
-  $('btn-ranking').onclick = showRanking;
 }
 
 const ago = (at) => {
@@ -166,108 +139,10 @@ async function renderFeed() {
   try {
     const { events } = await api.feed();
     if (!events.length) { el.hidden = true; return; }
-    el.innerHTML = `<p class="feed-title">Fil d'actu</p>${events.slice(0, 6).map((e) => `
+    el.innerHTML = `<div class="panel-head"><h2>Fil d'actu</h2></div>${events.slice(0, 6).map((e) => `
       <div class="feed-item ${e.kind}"><span>${esc(e.text)}</span><small>${ago(e.at)}</small></div>`).join('')}`;
     el.hidden = false;
   } catch { el.hidden = true; }
-}
-
-async function showRanking() {
-  $('screen-start').hidden = true;
-  $('screen-ranking').hidden = false;
-  const el = $('ranking');
-  el.innerHTML = '<div class="board-head"><h2 class="board-title" style="font-size:28px">Classement</h2></div><p class="note-row">Chargement…</p>';
-  let rows = '';
-  try {
-    const { players } = await api.ranking();
-    rows = players.length ? players.map((p) => `
-      <div class="row rk-row${api.user && p.pseudo === api.user.pseudo ? ' me' : ''}">
-        <span class="row-time">${p.rank}</span>
-        <span class="row-mid"><span class="row-dest">${esc(p.pseudo)}${p.crowns ? ` <span class="crowns">👑×${p.crowns}</span>` : ''}</span><span class="row-type">${p.missions} mission${p.missions > 1 ? 's' : ''} · ${fr0.format(p.score)} pts</span></span>
-        <span class="row-stars">${p.stars} ★</span>
-      </div>`).join('') : '<p class="note-row">Personne n\'a encore roulé. À toi l\'honneur.</p>';
-  } catch (e) {
-    rows = `<p class="note-row">${esc(e.message)}</p>`;
-  }
-  el.innerHTML = `
-    <div class="board-head"><div><p class="board-sub">Ligne U · toutes missions</p><h2 class="board-title" style="font-size:28px">Classement</h2></div></div>
-    ${rows}
-    <div class="brief-actions" style="padding-top:12px"><button class="ghost-btn" type="button" id="btn-rk-back">Retour aux départs</button></div>`;
-  $('btn-rk-back').onclick = () => { $('screen-ranking').hidden = true; showBoard(); };
-}
-
-function showBrief(m) {
-  const p = progress()[m.id];
-  const stops = (m.stops ?? range(m.from + 1, m.to));
-  const all = range(m.from + 1, m.to);
-  const cond = [];
-  const probe = { limits: [], signals: [], leaves: [], animals: [], works: [] };
-  const hk = { limit: () => probe.limits.push(1), signal: () => probe.signals.push(1), leaves: () => probe.leaves.push(1), animal: () => probe.animals.push(1), works: () => probe.works.push(1), runner: () => {}, passengers: () => {} };
-  m.build(hk);
-  if (m.weather === 'rain') cond.push('<span class="pill pill-ok">Pluie · rails glissants</span>');
-  if (probe.leaves.length) cond.push('<span class="pill pill-late">Feuilles mortes</span>');
-  if (probe.animals.length) cond.push('<span class="pill pill-late">Animal sur la voie</span>');
-  if (probe.works.length) cond.push('<span class="pill pill-late">Travaux</span>');
-  if (probe.signals.length) cond.push('<span class="pill pill-off">Signal fermé</span>');
-  if (probe.limits.length) cond.push('<span class="pill pill-off">Limitations</span>');
-  $('brief').innerHTML = `
-    <div class="board-head">
-      <div>
-        <p class="board-sub">${m.daily ? 'Défi du jour' : m.stops ? 'Semi-direct' : 'Omnibus'} · départ ${fmtClock(m.clock[0] * 3600 + m.clock[1] * 60, false)}</p>
-        <h2 class="board-title" style="font-size:28px">${m.title}</h2>
-      </div>
-    </div>
-    <div class="brief-body">
-      <p class="brief-blurb">${m.blurb}</p>
-      <div class="brief-stops">${all.map((k) => `<span class="${stops.includes(k) ? '' : 'pass'}">${STATIONS[k].name}</span>`).join('')}</div>
-      <div class="brief-cond">${cond.join('')}</div>
-      <div class="brief-best">${p ? `Ton record : ${fr0.format(p.score)} pts · ${'★'.repeat(p.stars)}` : 'Pas encore de record sur cette mission.'}</div>
-      <div class="brief-lb" id="brief-lb"></div>
-    </div>
-    <div class="brief-actions">
-      <button class="big-btn" type="button" id="btn-go">Prendre les commandes</button>
-      <button class="ghost-btn" type="button" id="btn-back">Retour aux départs</button>
-    </div>`;
-  $('screen-start').hidden = true;
-  $('screen-brief').hidden = false;
-  $('btn-go').onclick = () => startMission(m);
-  $('btn-back').onclick = () => { $('screen-brief').hidden = true; showBoard(); };
-  const hasLocal = !!store.get(ghostKey(m.id), null) || (api.loggedIn && p);
-  ghostChoice = hasLocal ? { type: 'me' } : { type: 'titulaire' };
-  renderGhostChoice(m, null);
-  if (api.online) {
-    api.leaderboard(m.id).then((lb) => {
-      const leader = lb.top[0];
-      if (leader && (!api.user || leader.pseudo !== api.user.pseudo)) ghostChoice = { type: 'player', pseudo: leader.pseudo };
-      renderGhostChoice(m, lb);
-    }).catch(() => {});
-  }
-}
-
-function renderGhostChoice(m, lb) {
-  const el = $('brief-lb');
-  if (!el) return;
-  const hasMe = !!store.get(ghostKey(m.id), null) || (api.loggedIn && progress()[m.id]);
-  const opt = (type, pseudo, label, sub) => {
-    const on = ghostChoice.type === type && (type !== 'player' || ghostChoice.pseudo === pseudo);
-    return `<button class="lb-row${on ? ' on' : ''}" type="button" data-gt="${type}" data-gp="${esc(pseudo ?? '')}">${label}<small>${sub}</small><i>${on ? 'Fantôme ✓' : 'Fantôme'}</i></button>`;
-  };
-  let html = '<p class="feed-title">Rouler contre</p>';
-  if (lb && lb.top.length) {
-    html += lb.top.slice(0, 5).map((r) => opt('player', r.pseudo, `<b>${r.rank === 1 ? '👑' : `${r.rank}.`} ${esc(r.pseudo)}</b>`, `${fr0.format(r.score)} pts · ${'★'.repeat(r.stars)}`)).join('');
-    if (lb.mine && lb.mine.rank > 5) html += `<p class="acc-note">Toi : ${lb.mine.rank}e · ${fr0.format(lb.mine.score)} pts</p>`;
-  }
-  if (hasMe && !(lb && lb.top.some((r) => api.user && r.pseudo === api.user.pseudo && r.rank <= 5))) html += opt('me', null, '<b>Ton record</b>', 'Ton meilleur passage');
-  html += opt('titulaire', null, '<b>Le titulaire</b>', 'Conducteur de référence');
-  el.innerHTML = html;
-  el.onclick = (e) => {
-    const b = e.target.closest('[data-gt]');
-    if (!b) return;
-    const type = b.dataset.gt;
-    const pseudo = b.dataset.gp;
-    ghostChoice = type === 'player' && api.user && pseudo === api.user.pseudo ? { type: 'me' } : { type, pseudo };
-    renderGhostChoice(m, lb);
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +160,10 @@ async function startMission(m) {
   sched = schedCache[m.id];
   ghost = await loadGhost(m);
   starting = false;
-  run = createRun(m, { sched });
+  const g = gear(m);
+  run = createRun(m, { sched, rame: g.rame });
+  run.livree = g.livree;
+  runGear = g;
   runLog = newLog();
   lever = 0;
   acc = 0;
@@ -293,6 +171,10 @@ async function startMission(m) {
   closeReq = false;
   world.zoom = 1;
   $('mission-title').textContent = m.title;
+  const lp = $('line-pict');
+  lp.textContent = run.m.route.line.id;
+  lp.style.background = run.m.route.line.color;
+  lp.style.color = run.m.route.line.ink;
   buildStrip();
   for (const id of ['screen-start', 'screen-brief', 'screen-pause', 'screen-end']) $(id).hidden = true;
   $('pops').innerHTML = '';
@@ -304,19 +186,19 @@ async function startMission(m) {
 }
 
 async function loadGhost(m) {
-  const choice = ghostChoice ?? { type: 'titulaire' };
-  const titulaire = { frames: sched.frames, label: 'Titulaire' };
+  const choice = home.ghostChoice ?? { type: 'titulaire' };
+  const titulaire = { frames: sched.frames, label: 'Titulaire', rame: m.fixedRame ?? 'Z2N', livree: 'origine' };
   try {
     if (choice.type === 'player' && api.online) {
       const g = await api.ghost(m.id, choice.pseudo);
-      return { frames: g.frames, label: g.pseudo };
+      return { frames: g.frames, label: g.pseudo, rame: g.rame, livree: g.livree };
     }
     if (choice.type === 'me') {
       const local = store.get(ghostKey(m.id), null);
-      if (local) return { frames: local, label: 'Ton record' };
+      if (local) return Array.isArray(local) ? { frames: local, label: 'Ton record' } : { ...local, label: 'Ton record' };
       if (api.loggedIn) {
         const g = await api.ghost(m.id, api.user.pseudo);
-        return { frames: g.frames, label: 'Ton record' };
+        return { frames: g.frames, label: 'Ton record', rame: g.rame, livree: g.livree };
       }
     }
   } catch { /* fantôme indisponible : on roule avec le titulaire */ }
@@ -354,7 +236,7 @@ function frame(ts) {
   }
   if (run) {
     const gx = ghostAt(run.t);
-    const ghosts = gx != null ? [{ x: gx, label: ghost.label }] : [];
+    const ghosts = gx != null ? [{ x: gx, label: ghost.label, rame: ghost.rame, livree: ghost.livree }] : [];
     world.draw(run, ghosts, ts);
     updateHud();
   } else {
@@ -577,6 +459,7 @@ function updateHud() {
   }
   const adh = adhesionAt(r, r.x);
   if (adh < 0.5) chips.push('<span class="chip warn">Feuilles mortes · adhérence faible</span>');
+  else if (r.m.weather === 'snow') chips.push('<span class="chip info">Neige · freinez tôt</span>');
   else if (adh < 1) chips.push('<span class="chip info">Rails mouillés</span>');
   if (r.kvb) alert = { cls: 'red', text: 'KVB · freinage d\'urgence' };
   else if (r.overspeed) alert = { cls: 'red', text: `Survitesse · limite ${lim}` };
@@ -768,7 +651,7 @@ function bindButtons() {
   $('btn-pause').addEventListener('click', () => setPaused(true));
   $('btn-resume').addEventListener('click', () => setPaused(false));
   $('btn-restart').addEventListener('click', () => startMission(mission));
-  $('btn-quit').addEventListener('click', () => { run = null; showBoard(); });
+  $('btn-quit').addEventListener('click', () => { run = null; showHome('departs'); });
   $('btn-sound').addEventListener('click', () => {
     audio.setMuted(!audio.muted);
     store.set('ukipu.drive.muted', audio.muted);
@@ -776,21 +659,12 @@ function bindButtons() {
   });
   $('sound-lbl').textContent = `Son : ${audio.muted ? 'coupé' : 'activé'}`;
   $('btn-again').addEventListener('click', () => startMission(mission));
-  $('btn-board').addEventListener('click', () => { run = null; showBoard(); });
+  $('btn-board').addEventListener('click', () => { run = null; showHome('departs'); });
   $('btn-next').addEventListener('click', () => {
-    const list = allMissions();
-    const i = list.findIndex((m) => m.id === mission.id);
-    const nx = list.slice(i + 1).find((m) => unlocked(m));
-    if (nx) showBrief(nx); else showBoard();
+    const nx = nextMission();
+    if (nx) showBrief(nx); else showHome('departs');
   });
   $('btn-copy').addEventListener('click', copyResult);
-  $('missions').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-mission]');
-    if (!b) return;
-    const m = allMissions().find((x) => x.id === b.dataset.mission);
-    if (m && unlocked(m)) showBrief(m);
-    else toast('Gagne plus d\'étoiles pour débloquer cette mission');
-  });
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 }
 
@@ -812,7 +686,7 @@ function showEnd() {
   const isBest = !prev || res.score > prev.score;
   if (isBest) {
     prog[mission.id] = { score: res.score, stars: Math.max(res.stars, prev?.stars ?? 0), at: Date.now() };
-    store.set(ghostKey(mission.id), run.frames);
+    store.set(ghostKey(mission.id), { frames: run.frames, rame: run.serie.id, livree: run.livree });
   } else if (res.stars > prev.stars) prog[mission.id].stars = res.stars;
   store.set(progKey(), prog);
 
@@ -825,7 +699,7 @@ function showEnd() {
   $('ticket').innerHTML = `
     <div class="tk-head"><span>Bulletin de conduite · Ligne U</span></div>
     <h2 class="tk-title">${title}</h2>
-    <p class="tk-sub">${mission.title} · ${STATIONS[mission.from].name} → ${STATIONS[mission.to].name}</p>
+    <p class="tk-sub">${mission.title} · ${lineOf(mission).stations[mission.from].name} → ${lineOf(mission).stations[mission.to].name}</p>
     <div class="tk-big"><b>${fr0.format(res.score)}</b><span>points${isBest ? ' · record !' : ''}</span></div>
     <div class="tk-stops">${res.grades.map((g) => `
       <div class="tk-stop"><span>${g.name}</span><span class="tk-grade ${g.grade}">${gradeLbl[g.grade]}${g.d != null ? ` ${fr1.format(Math.abs(g.d))} m` : ''}</span>
@@ -843,26 +717,31 @@ function showEnd() {
     <div class="tk-feed"><b>${esc(pseudo)}</b> a conduit « ${mission.title} » : ${fr0.format(res.score)} pts.</div>
     <div class="stamp">Composté<span class="stars">${'★'.repeat(res.stars)}${'☆'.repeat(3 - res.stars)}</span>${today}</div>`;
   $('copy-fallback').hidden = true;
-  const list = allMissions();
-  const i = list.findIndex((m) => m.id === mission.id);
-  $('btn-next').disabled = !list.slice(i + 1).some((m) => unlocked(m));
+  $('btn-next').disabled = !nextMission();
   $('screen-end').hidden = false;
-  if (api.loggedIn) sendRun(mission, runLog);
+  if (api.loggedIn) sendRun(mission, runLog, runGear);
 }
 
-async function sendRun(m, log) {
+async function sendRun(m, log, g) {
   const el = $('tk-online');
   try {
-    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c });
+    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c }, g);
     let html;
     if (r.crown && r.dethroned) html = `👑 <b>Tu prends la tête</b> et tu détrônes <b>${esc(r.dethroned)}</b> !`;
     else if (r.crown) html = r.players > 1 ? '👑 <b>Tu gardes la tête</b> du classement.' : '👑 <b>Premier au classement</b> de cette mission.';
     else html = `Classement : <b>${r.rank}<sup>e</sup></b> sur ${r.players}${r.best ? ' · nouveau record perso' : ''}`;
     if (r.score !== run?.result?.score) html += `<small>Score vérifié par le serveur : ${fr0.format(r.score)} pts</small>`;
+    if (r.reward) {
+      html += `<div class="tk-reward">+${fr0.format(r.reward.tickets)} 🎟${r.reward.boxes.map((k) => ` · 🎁 ${k === 'rare' ? 'colis rare' : 'colis'}`).join('')}</div>`;
+      if (r.reward.boxes.length) html += `<button class="pill pill-good tk-open" type="button" id="tk-open" data-kind="${r.reward.boxes[0]}">Ouvrir le colis</button>`;
+    }
     el.innerHTML = html;
     el.classList.add(r.crown ? 'crown' : 'ok');
+    const ob = $('tk-open');
+    if (ob) ob.onclick = () => openBoxFlow(ob.dataset.kind);
     await api.refresh();
     syncProgress();
+    refreshProfile();
     if (r.crown) { audio.perfect(); }
   } catch (e) {
     el.textContent = `Envoi impossible : ${e.message}`;
@@ -902,11 +781,13 @@ function boot() {
   new ResizeObserver(() => world.resize()).observe($('world-wrap'));
   bindLever();
   bindButtons();
-  showBoard();
+  initHome({ startMission, toast, progress, store, ghostKey, audio, renderAccount, renderFeed });
+  showHome('reseau');
   requestAnimationFrame(frame);
-  api.init().then(() => {
+  api.init().then(async () => {
     syncProgress();
-    if (!$('screen-start').hidden) showBoard();
+    await refreshProfile();
+    if (!$('screen-start').hidden) showHome();
   });
 }
 

@@ -6,6 +6,14 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V1 — le jeu complet
+
+- **5 lignes** : U, L, N, RER C, RER A — 21 missions + un défi du jour, tunnels, ponts sur la Seine, Paris, nuit, pluie et neige.
+- **Carte du réseau** : les lignes se débloquent par les correspondances et les étoiles ; une couronne par ligne.
+- **Dépôt** : 10 rames (Commun → Mythique) qui conduisent différemment, 5 niveaux d'amélioration, 8 livrées.
+- **Colis** multi-contenu ouverts un objet à la fois, **tickets** et **pièces** gagnés en roulant, **cadeau quotidien** (série de 7 jours).
+- Tout est vérifié par le serveur (tirages, possession des rames, scores rejoués).
+
 ## V0.3 — mode conduite
 
 Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 4 à 6 arrêts (environ 4 à 5 min), et la ligne complète pour les acharnés.
@@ -63,12 +71,13 @@ node tools/headless.js 30 bot
 | Fichier | Rôle |
 |---|---|
 | `public/index.html`, `public/css/drive.css` | Mode conduite (PWA, iPhone et PC) |
-| `public/js/drive/route.js` | Tracé de la U, missions, aléas, défi du jour |
+| `public/js/drive/route.js` | Lignes, gares, missions, aléas, défi du jour, rames, livrées, colis |
+| `public/js/drive/home.js` | Accueil : carte du réseau, départs, dépôt, colis, classement, fiche mission |
 | `public/js/drive/sim.js` | Physique et règles de conduite déterministes, conducteur titulaire (IA) |
 | `public/js/drive/world.js` | Vue de côté : décors en parallaxe, quais, Z 2N |
 | `public/js/drive/main.js`, `public/js/drive/audio.js` | Pupitre, écrans, sons synthétisés |
 | `public/js/drive/api.js` | Accès au serveur (comptes, parties, classements, fantômes) |
-| `server/worker.js`, `wrangler.toml` | Serveur Cloudflare (Worker + D1) |
+| `server/worker.js`, `server/economy.js`, `wrangler.toml` | Serveur Cloudflare (Worker + D1) : comptes, parties, économie |
 | `public/regulation.html`, `public/css/style.css` | Ancien mode régulation |
 | `public/js/data.js` | Ligne U, personnel, incidents, scénario |
 | `public/js/sim.js` | Simulation déterministe — réutilisable côté serveur pour rejouer une partie |

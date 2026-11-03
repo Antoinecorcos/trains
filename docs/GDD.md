@@ -1,5 +1,30 @@
 # UKIPU — Document de game design
 
+> **Mise à jour V1 (jeu complet).** Le cœur du jeu a évolué après les tests : la régulation en
+> 5 minutes manquait de dynamisme. Ukipu est désormais un **jeu de conduite** (vue de côté) où
+> l'on s'arrête au mètre près, gare après gare. Le reste de la vision (expansion par les
+> correspondances, collection, couronnes, ego entre potes) est en place. Le résumé ci-dessous
+> décrit le jeu tel qu'il est ; les sections suivantes gardent la réflexion d'origine.
+
+## 0. Le jeu aujourd'hui (V1)
+
+| Pilier | Ce qui est en place |
+|---|---|
+| **Cœur** | Conduite d'une rame : manipulateur traction/freinage, arrêt pile au repère (PARFAIT < 0,5 m), combos, fermeture des portes au bon moment, horaire à tenir, départ verrouillé avant l'heure. |
+| **Aléas** | Signaux fermés, limitations et contrôle de vitesse (KVB), feuilles mortes, pluie et neige (patinage, enrayage), sanglier et agents à prévenir au klaxon, retardataires, jours de grève. |
+| **Réseau** | 5 lignes : **U** (9 missions), **L**, **N**, **RER C**, **RER A** (3 missions chacune), avec tunnels, ponts sur la Seine, Paris, nuit et neige. Les lignes se débloquent par les correspondances et les étoiles (L et N depuis la U, A depuis la L, C depuis la N). |
+| **Défi du jour** | Ligne, tronçon, météo et aléas tirés au hasard, identiques pour tous, **rame imposée** : à armes égales. |
+| **Collection** | 10 rames (Commun → Mythique) qui conduisent différemment (accélération, freinage, portes, adhérence), 5 niveaux d'amélioration ; 8 livrées visibles par les autres sur leurs fantômes. |
+| **Économie** | Tickets gagnés à chaque partie, pièces détachées, 3 sortes de colis multi-contenu (tirés par le serveur), cadeau quotidien avec série de 7 jours, colis bonus pour les 3 étoiles, les couronnes et le défi du jour. |
+| **Ego** | Classement par mission, couronne par ligne (meilleur cumul de records), classement général, fantômes des potes, fil d'actu (couronnes volées, sorties légendaires, sangliers percutés). |
+| **Confiance** | Le serveur rejoue chaque partie à partir du journal des commandes : impossible d'envoyer un faux score ou de rouler avec une rame qu'on ne possède pas. |
+
+Pas encore fait : monétisation (Pass Navigo, livrées payantes), sabotage entre potes, mode duo,
+extension métro, poste d'aiguillage multi-lignes.
+
+---
+
+
 > *Ukipu · Régulation Île-de-France*
 > Version 0.1 — document de travail, à valider avant le développement de la V0.
 
