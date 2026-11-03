@@ -4,6 +4,8 @@
 
 **Jouer : https://ukipu.antiprod.workers.dev** (sur iPhone : Safari → Partager → Sur l'écran d'accueil).
 
+À l'arrivée : la carte du réseau en plein écran (zoom au doigt, lignes cliquables, trains animés), puis les onglets Départs, Dépôt et Classement.
+
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
 ## V1 — le jeu complet
