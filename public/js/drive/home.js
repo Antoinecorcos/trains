@@ -1,9 +1,12 @@
 // Accueil : carte du réseau, départs par ligne, dépôt (collection, colis), classement, fiche mission.
 import {
-  MISSIONS, LINES, LINE_UNLOCK, INTERCHANGES, RAMES, LIVREES, RARITIES, BOX_SHOP, MAX_LEVEL, levelCost,
+  MISSIONS, LINES, LINE_UNLOCK, RAMES, LIVREES, RARITIES, BOX_SHOP, MAX_LEVEL, levelCost,
   dailyMission, dailyKey, lineOf, buildRoute,
 } from './route.js';
 import { api } from './api.js';
+import { mountNetMap } from './netmap.js';
+
+let netmap = null;
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -69,6 +72,8 @@ export function showHome(tab = state.tab) {
   renderWallet();
   const body = $('home-body');
   body.scrollTop = 0;
+  if (netmap) { netmap.destroy(); netmap = null; }
+  body.classList.toggle('map-mode', tab === 'reseau');
   if (tab === 'reseau') renderReseau(body);
   else if (tab === 'departs') renderDeparts(body);
   else if (tab === 'depot') renderDepot(body);
@@ -114,6 +119,13 @@ async function onHomeClick(e) {
     } catch (err) { C.toast(err.message); }
   } else if (a === 'logout') { await api.logout(); state.profile = null; showHome('reseau'); }
   else if (a === 'tab') showHome(t.dataset.tab);
+  else if (a === 'account') openAccountModal();
+  else if (a === 'modal-close') $('mh-modal').hidden = true;
+  else if (a === 'line-sheet') showLineSheet(t.dataset.id);
+  else if (a === 'sheet-close') $('mh-sheet').hidden = true;
+  else if (a === 'zoom-in') netmap?.zoom(1.35);
+  else if (a === 'zoom-out') netmap?.zoom(1 / 1.35);
+  else if (a === 'zoom-fit') netmap?.fit();
 }
 
 // ---------------------------------------------------------------------------
@@ -123,97 +135,87 @@ async function onHomeClick(e) {
 function renderReseau(body) {
   const p = state.profile;
   const today = dailyKey();
-  const gift = p && p.daily.last !== today
-    ? `<button class="gift" type="button" data-act="daily"><span class="gift-ico">🎁</span><span><b>Cadeau du jour</b><small>Jour ${((p.daily.last === dailyKey(new Date(Date.now() - 86400000)) ? p.daily.streak : 0) % 7) + 1} sur 7 · touche pour le récupérer</small></span></button>`
-    : '';
+  const giftDay = p ? ((p.daily.last === dailyKey(new Date(Date.now() - 86400000)) ? p.daily.streak : 0) % 7) + 1 : 0;
+  const hasGift = p && p.daily.last !== today;
+  const agent = !api.online ? '<span class="mh-chip off">Hors ligne</span>'
+    : api.loggedIn ? `<button class="mh-chip" type="button" data-act="account">👤 ${esc(api.user.pseudo)}</button>`
+      : '<button class="mh-chip login" type="button" data-act="account">Se connecter</button>';
   body.innerHTML = `
-    <div id="account" class="account"></div>
-    ${gift}
-    <section class="panel">
-      <div class="panel-head"><h2>Le réseau</h2><span class="muted">${totalStars()} ★ au total</span></div>
-      <div class="map-wrap">${mapSvg()}</div>
-      <div class="line-list">${Object.values(LINES).map(lineCard).join('')}</div>
-    </section>
-    <section class="panel" id="feed" hidden></section>
-    <p class="foot-note">Plan schématique : positions des gares approximatives. <a href="regulation.html">Mode régulation (prototype) ›</a></p>`;
-  C.renderAccount();
-  C.renderFeed();
-  if (api.online) api.lines().then((d) => { state.crowns = d.lines; if (state.tab === 'reseau') { const ll = body.querySelector('.line-list'); if (ll) ll.innerHTML = Object.values(LINES).map(lineCard).join(''); const mw = body.querySelector('.map-wrap'); if (mw) mw.innerHTML = mapSvg(); } }).catch(() => {});
-}
-
-function lineCard(l) {
-  const open = lineOpen(l.id);
-  const u = LINE_UNLOCK[l.id];
-  const crown = state.crowns?.[l.id]?.crown;
-  const why = u ? `${u.stars} ★ sur la ${LINES[u.line].name} pour débloquer` : '';
-  return `
-    <button class="line-card${open ? '' : ' locked'}" type="button" data-act="${open ? 'line' : 'locked'}" data-id="${l.id}" data-why="${esc(why)}">
-      ${pict(l.id, 'pict-md')}
-      <span class="lc-mid">
-        <b>${l.name}</b>
-        <small>${open ? `${starsOn(l.id)} / ${maxStarsOn(l.id)} ★ · ${MISSIONS.filter((m) => m.line === l.id).length} missions` : `🔒 ${why}`}</small>
-      </span>
-      <span class="lc-end">${crown ? `<span class="crown-chip">👑 ${esc(crown.pseudo)}</span>` : open ? '<span class="go">›</span>' : ''}</span>
-    </button>`;
-}
-
-// Carte schématique : projection simple des coordonnées des gares
-function mapSvg() {
-  const W = 1000;
-  const H = 720;
-  const lon0 = 1.79;
-  const lon1 = 2.40;
-  const lat0 = 48.625;
-  const lat1 = 48.94;
-  const P = (lon, lat) => [((lon - lon0) / (lon1 - lon0)) * W, ((lat1 - lat) / (lat1 - lat0)) * H];
-  const seine = [[2.37, 48.848], [2.345, 48.857], [2.31, 48.864], [2.29, 48.858], [2.272, 48.845], [2.258, 48.83], [2.235, 48.827], [2.222, 48.842], [2.222, 48.862], [2.238, 48.882], [2.258, 48.9], [2.28, 48.915], [2.3, 48.922], [2.27, 48.932], [2.23, 48.93], [2.2, 48.915], [2.175, 48.896], [2.158, 48.887], [2.14, 48.885], [2.12, 48.893], [2.105, 48.905], [2.09, 48.925]];
-  let svg = `<svg viewBox="0 0 ${W} ${H}" class="map" role="img" aria-label="Carte du réseau">`;
-  svg += `<rect width="${W}" height="${H}" rx="18" class="map-bg"/>`;
-  svg += `<polyline class="map-seine" points="${seine.map(([a, b]) => P(a, b).join(',')).join(' ')}"/>`;
-  svg += `<text x="${P(2.205, 48.9)[0]}" y="${P(2.205, 48.9)[1]}" class="map-river">Seine</text>`;
-  const pz = P(2.336, 48.856);
-  svg += `<circle cx="${pz[0]}" cy="${pz[1]}" r="46" class="map-paris"/><text x="${pz[0]}" y="${pz[1] + 6}" class="map-paris-t">PARIS</text>`;
-  const order = ['A', 'C', 'N', 'L', 'U'];
-  for (const id of order) {
-    const l = LINES[id];
-    const open = lineOpen(id);
-    const pts = l.stations.map((s) => P(s.lon, s.lat).map((v) => v.toFixed(1)).join(',')).join(' ');
-    svg += `<polyline points="${pts}" class="map-line${open ? '' : ' off'}" style="stroke:${open ? l.color : '#5b6390'}"/>`;
-  }
-  const seen = new Set();
-  for (const id of order) {
-    const l = LINES[id];
-    l.stations.forEach((s, i) => {
-      if (seen.has(s.name)) return;
-      seen.add(s.name);
-      const [x, y] = P(s.lon, s.lat);
-      const hub = !!INTERCHANGES[s.name];
-      const big = (INTERCHANGES[s.name]?.length ?? 0) >= 3;
-      const end = i === 0 || i === l.stations.length - 1;
-      svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${big ? 11 : hub ? 7 : 5}" class="map-st${hub ? ' hub' : ''}"/>`;
-      if (big || end) {
-        const right = x < W * 0.62;
-        svg += `<text x="${(x + (right ? 13 : -13)).toFixed(1)}" y="${(y + 5).toFixed(1)}" class="map-label" text-anchor="${right ? 'start' : 'end'}">${esc(s.name)}</text>`;
-      }
+    <div class="map-hero">
+      <div class="map-host" id="map-host"></div>
+      <div class="mh-top">
+        ${agent}
+        <span class="mh-chip">★ ${totalStars()}</span>
+      </div>
+      <div class="mh-ticker"><span class="ticker-tag">Info</span><div class="ticker-win"><span id="mh-ticker-text">Touche une ligne pour voir ses départs · pince pour zoomer</span></div></div>
+      <div class="mh-zoom">
+        <button type="button" data-act="zoom-in" aria-label="Zoomer">+</button>
+        <button type="button" data-act="zoom-out" aria-label="Dézoomer">−</button>
+        <button type="button" data-act="zoom-fit" aria-label="Recentrer">⤢</button>
+      </div>
+      ${hasGift ? `<button class="mh-gift" type="button" data-act="daily"><span>🎁</span><small>Jour ${giftDay}/7</small></button>` : ''}
+      <div class="mh-legend">${Object.values(LINES).map((l) => `<button type="button" data-act="${lineOpen(l.id) ? 'line-sheet' : 'locked'}" data-id="${l.id}" data-why="${esc(lineOpen(l.id) ? '' : `${LINE_UNLOCK[l.id].stars} ★ sur la ${LINES[LINE_UNLOCK[l.id].line].name} pour débloquer`)}" class="${lineOpen(l.id) ? '' : 'locked'}">${pict(l.id, 'pict-sm')}</button>`).join('')}</div>
+      <div class="mh-sheet" id="mh-sheet" hidden></div>
+      <div class="mh-tip" id="mh-tip" hidden></div>
+      <div class="mh-modal" id="mh-modal" hidden><div class="mh-modal-card"><div id="account" class="account"></div><button class="ghost-btn" type="button" data-act="modal-close">${api.loggedIn ? 'Fermer' : 'Plus tard'}</button></div></div>
+    </div>`;
+  const mount = () => {
+    if (netmap) netmap.destroy();
+    netmap = mountNetMap($('map-host'), {
+      lineOpen, crowns: state.crowns, focus: 'U',
+      onLine: (id) => showLineSheet(id),
+      onStation: (name, x, y) => showStationTip(name, x, y),
+      onEmpty: () => { $('mh-sheet').hidden = true; $('mh-tip').hidden = true; },
     });
+  };
+  mount();
+  if (api.online) {
+    api.lines().then((d) => { state.crowns = d.lines; if (state.tab === 'reseau' && $('map-host')) mount(); }).catch(() => {});
+    api.feed().then(({ events }) => {
+      const el = $('mh-ticker-text');
+      if (!events.length || !el) return;
+      el.textContent = events.slice(0, 6).map((e) => e.text).join('   ·   ');
+      el.classList.add('scroll');
+      el.style.animationDuration = `${Math.max(14, el.textContent.length / 6)}s`;
+    }).catch(() => {});
+    if (!api.loggedIn && !state.askedLogin) { state.askedLogin = true; openAccountModal(); }
   }
-  // pastilles de ligne (cliquables) avec la couronne
-  for (const id of order) {
-    const l = LINES[id];
-    const mid = l.stations[Math.floor(l.stations.length * 0.62)];
-    const [x, y] = P(mid.lon, mid.lat);
-    const open = lineOpen(id);
-    const crown = state.crowns?.[id]?.crown;
-    const dx = { U: -40, L: 30, N: -46, C: 34, A: 0 }[id];
-    const dy = { U: 30, L: -34, N: 34, C: -30, A: -36 }[id];
-    svg += `<g class="map-pin" data-act="${open ? 'line' : 'locked'}" data-id="${id}" data-why="${open ? '' : esc(`${LINE_UNLOCK[id].stars} ★ sur la ${LINES[LINE_UNLOCK[id].line].name} pour débloquer`)}">
-      <rect x="${x + dx - 19}" y="${y + dy - 19}" width="38" height="38" rx="8" fill="${open ? l.color : '#3b4377'}"/>
-      <text x="${x + dx}" y="${y + dy + 9}" class="map-pin-t" fill="${open ? l.ink : '#9aa2d6'}">${open ? id : '🔒'}</text>
-      ${crown ? `<text x="${x + dx}" y="${y + dy - 26}" class="map-crown">👑 ${esc(crown.pseudo)}</text>` : ''}
-    </g>`;
-  }
-  svg += '</svg>';
-  return svg;
+}
+
+function openAccountModal() {
+  const m = $('mh-modal');
+  if (!m) return;
+  m.hidden = false;
+  C.renderAccount();
+}
+
+function showLineSheet(id) {
+  const l = LINES[id];
+  const open = lineOpen(id);
+  const u = LINE_UNLOCK[id];
+  const crown = state.crowns?.[id]?.crown;
+  const sh = $('mh-sheet');
+  $('mh-tip').hidden = true;
+  sh.innerHTML = `
+    <div class="sh-head">${pict(id, 'pict-md')}<div><b>${l.name}</b><small>${l.kind} · ${l.stations[0].name} ↔ ${l.stations[l.stations.length - 1].name}</small></div><button type="button" class="sh-x" data-act="sheet-close" aria-label="Fermer">✕</button></div>
+    <div class="sh-stats">
+      <span><b>${starsOn(id)}/${maxStarsOn(id)}</b> ★</span>
+      <span><b>${MISSIONS.filter((m) => m.line === id).length}</b> missions</span>
+      <span><b>${l.stations.length}</b> gares</span>
+      <span>${crown ? `👑 <b>${esc(crown.pseudo)}</b>` : 'Couronne libre'}</span>
+    </div>
+    ${open ? `<button class="big-btn" type="button" data-act="line" data-id="${id}">Voir les départs ›</button>` : `<p class="sh-lock">🔒 ${u.stars} ★ sur la ${LINES[u.line].name} pour débloquer cette ligne</p>`}`;
+  sh.hidden = false;
+}
+
+function showStationTip(name, x, y) {
+  const tip = $('mh-tip');
+  const lines = Object.values(LINES).filter((l) => l.stations.some((s) => s.name === name)).map((l) => l.id);
+  const r = $('map-host').getBoundingClientRect();
+  tip.innerHTML = `<b>${esc(name)}</b><span>${lines.map((id) => pict(id, 'pict-xs')).join(' ')}</span>`;
+  tip.style.left = `${Math.min(r.width - 200, Math.max(8, x - r.left - 90))}px`;
+  tip.style.top = `${Math.max(60, y - r.top - 70)}px`;
+  tip.hidden = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,8 +427,10 @@ async function renderClassement(body) {
         <span class="row-stars">${p.stars} ★</span>
       </div>`).join('') : '<p class="muted pad">Personne n\'a encore roulé. À toi l\'honneur.</p>';
     body.innerHTML = `
+      <section class="panel" id="feed" hidden></section>
       <section class="board"><div class="board-head"><div><h1 class="board-title">Couronnes</h1><p class="board-sub">Meilleur cumul de records par ligne</p></div></div>${crowns}</section>
       <section class="board"><div class="board-head"><div><h1 class="board-title">Conducteurs</h1><p class="board-sub">Étoiles, puis points</p></div></div>${list}</section>`;
+    C.renderFeed();
   } catch (err) {
     body.innerHTML = `<section class="panel"><p class="muted pad">${esc(err.message)}</p></section>`;
   }
