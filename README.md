@@ -8,6 +8,12 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.2 — le direct
+
+- **Le direct de Rambouillet** (ligne N) : Montparnasse → Versailles-Chantiers → Rambouillet, 160 km/h autorisés, les petites gares traversées en trombe (+40 chacune au-dessus de 100 km/h).
+- Les rames rapides atteignent enfin leur vitesse maxi (Regio 2N à 160 km/h) ; le compteur passe à 170 sur les lignes rapides.
+- **Gares plus espacées** : au moins 460 m de jeu entre deux gares (un quai long + de quoi accélérer et freiner), fini les gares collées.
+
 ## V2.1 — au pupitre
 
 - **Portes à la main** : à l'arrêt, c'est toi qui ouvres (bouton Portes, ou **Entrée** sur PC), puis tu refermes avec la même commande. Tant que les portes sont fermées, tu peux encore avancer doucement jusqu'au repère : l'arrêt est noté à l'ouverture.

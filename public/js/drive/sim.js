@@ -37,6 +37,7 @@ export function createRun(mission, opts = {}) {
     animals: m.animals.map((a) => ({ ...a, state: 'track', waited: 0, fleeT: 0 })),
     works: m.works.map((w) => ({ ...w, warned: false, missed: false })),
     passed: new Set(),
+    flew: new Set(),
     doors: null,
     waitDoors: null, // instant où le train s'est immobilisé au repère, portes encore fermées
     reversedD: null,
@@ -187,7 +188,9 @@ function drive(r, hornEdge, input = {}) {
   if (r.kvb || r.spadT > r.t) lever = -1;
   let aT = 0;
   let aB = 0;
-  if (lever > 0 && !locked) aT = lever * serie.accel * Math.min(1, 14 / Math.max(r.v, 1)) * (r.v < serie.vmax ? 1 : 0);
+  // effort de traction à puissance constante au-delà de ~50 km/h (plus haut pour les rames rapides)
+  const vBase = 14 * Math.max(1, serie.vmax / (120 / 3.6));
+  if (lever > 0 && !locked) aT = lever * serie.accel * Math.min(1, vBase / Math.max(r.v, 1)) * (r.v < serie.vmax ? 1 : 0);
   if (lever < 0) aB = lever <= -0.92 ? FU : (-lever / 0.92) * serie.brake;
 
   let slip = false;
@@ -199,7 +202,7 @@ function drive(r, hornEdge, input = {}) {
   if (r.slip && !(slip && r.v > 0.5)) r.slipEnd = r.t;
   r.slip = slip && r.v > 0.5;
 
-  const res = r.v > 0 ? 0.015 + 0.00035 * r.v * r.v : 0;
+  const res = r.v > 0 ? 0.015 + 0.00022 * r.v * r.v : 0;
   const a = aT - aB - res;
   if (lever <= -0.92 && r.v > 0.5) r.comfort -= 2.2 * DT;
   if (Math.abs(a - r.a) / DT > 8 && r.v > 1) r.comfort -= 0.05;
@@ -276,6 +279,14 @@ function drive(r, hornEdge, input = {}) {
     if (!w.warned && !w.missed && r.x >= w.from) {
       w.missed = true;
       add(r, 'penalty', -150, { type: 'penalty', label: 'Agents non prévenus' });
+    }
+  }
+
+  // Gares traversées sans arrêt : bonus si on les passe à pleine vitesse
+  for (const p of r.m.passes) {
+    if (!r.flew.has(p.k) && prevX < p.x && r.x >= p.x) {
+      r.flew.add(p.k);
+      if (r.v >= 100 / 3.6) add(r, 'bonus', 40, { type: 'pass', label: `${p.name} en trombe`, kmh: Math.round(r.v * 3.6) });
     }
   }
 

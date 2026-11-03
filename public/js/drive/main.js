@@ -297,6 +297,10 @@ function handleEvents() {
         if (ev.label === 'Ouverture rapide') { setTimeout(() => pop(ev.label, `+${ev.pts}`, 'bien small'), 1300); break; }
         pop(ev.label, ev.pts > 0 ? `+${ev.pts}` : `${ev.pts}`, ev.pts > 100 ? 'super small' : ev.pts >= 0 ? 'bien small' : 'rate small');
         break;
+      case 'pass':
+        pop(ev.label, `+${ev.pts} · ${ev.kmh} km/h`, 'super small');
+        audio.whoosh();
+        break;
       case 'bonus':
       case 'fled':
       case 'warned':
@@ -563,7 +567,10 @@ function drawSpeedo(r) {
   ctx.beginPath(); ctx.arc(c, c, s * 0.49, 0, Math.PI * 2); ctx.fill();
   const a0 = Math.PI * 0.75;
   const span = Math.PI * 1.5;
-  const ang = (kmh) => a0 + (Math.min(130, kmh) / 130) * span;
+  // cadran adapté à la ligne : jusqu'à 130 km/h d'habitude, 170 sur les directs à 160
+  const top = (r.m.lineLimit ?? 100) > 130 ? 170 : 130;
+  const grad = top - 10;
+  const ang = (kmh) => a0 + (Math.min(top, kmh) / top) * span;
   const lim = limitAt(r, r.x);
   // arc vert jusqu'à la limite, rouge au-delà
   ctx.lineWidth = s * 0.05;
@@ -577,7 +584,7 @@ function drawSpeedo(r) {
   ctx.font = `800 ${s * 0.075}px "Nunito Sans", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (let v = 0; v <= 120; v += 10) {
+  for (let v = 0; v <= grad; v += 10) {
     const a = ang(v);
     const big = v % 20 === 0;
     ctx.lineWidth = big ? 2 : 1;

@@ -383,7 +383,7 @@ function renderDeparts(body) {
     const p = prog[m.id];
     const open = missionOpen(m);
     const st = p ? p.stars : 0;
-    const kind = m.daily ? 'Défi du jour' : m.stops ? 'Semi-direct' : 'Omnibus';
+    const kind = m.daily ? 'Défi du jour' : m.stops ? (m.stops.length <= 2 ? 'Direct' : 'Semi-direct') : 'Omnibus';
     const ml = lineOf(m);
     const n = m.stops ? m.stops.length : Math.abs(m.to - m.from);
     const right = !open
@@ -721,7 +721,7 @@ export function showBrief(m) {
   $('brief').innerHTML = `
     <div class="board-head">
       <div>
-        <p class="board-sub">${line.name} · ${m.daily ? 'Défi du jour' : m.weekly ? 'Défi hebdo' : m.stops ? 'Semi-direct' : 'Omnibus'} · départ ${fmtHM(m.clock)}</p>
+        <p class="board-sub">${line.name} · ${m.daily ? 'Défi du jour' : m.weekly ? 'Défi hebdo' : m.stops ? (m.stops.length <= 2 ? 'Direct' : 'Semi-direct') : 'Omnibus'} · départ ${fmtHM(m.clock)}</p>
         <h2 class="board-title" style="font-size:28px">${m.title}</h2>
       </div>
       ${pict(line.id, 'pict-lg')}

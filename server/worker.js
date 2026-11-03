@@ -242,7 +242,7 @@ async function me(env, user) {
 // ---------------------------------------------------------------------------
 
 async function scheduleFor(env, mission) {
-  const key = `${mission.id}@3`;
+  const key = `${mission.id}@4`;
   const row = await env.DB.prepare('SELECT data FROM schedules WHERE mission = ?').bind(key).first();
   if (row) return JSON.parse(row.data);
   const s = computeSchedule(mission);

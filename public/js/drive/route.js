@@ -5,6 +5,8 @@
 import { mulberry32 } from '../rng.js';
 
 const SCALE = 0.19;
+// Écart minimal entre deux gares (m de jeu) : un quai long + de quoi accélérer et freiner
+const MIN_GAP = 460;
 export const PLATFORM = 150; // quai court (m), le repère d'arrêt est en bout de quai
 export const PLATFORM_LONG = 225; // quai long : accueille un train long (deux rames)
 export const TRAIN_LEN = 104; // une rame de 4 voitures (unité simple, US)
@@ -135,6 +137,12 @@ for (const line of Object.values(LINES)) {
     if (i > 0 && line.stations[i].km == null) km += Math.max(0.9, hav(line.stations[i - 1], s) * 1.15);
     else if (s.km != null) km = s.km;
     return { ...s, km: Math.round(km * 100) / 100 };
+  });
+  // position de jeu : la distance réelle à l'échelle, sans jamais coller deux gares
+  let gx = 0;
+  line.stations.forEach((s, i) => {
+    if (i > 0) gx += Math.max(MIN_GAP, Math.round((s.km - line.stations[i - 1].km) * 1000 * SCALE));
+    s.gx = gx;
   });
 }
 
@@ -294,6 +302,16 @@ export const MISSIONS = [
     blurb: 'Rambouillet → Versailles sous la neige avec trois arrêts. Vitesse et adhérence, tout un art.',
     build: (h) => { h.limit(16, 15, 0, 0.3, 80, 'Neige'); h.animal(14, 13, 0.5); h.signal(11, 10, 0.5, 7, 'Train de la U devant'); },
   },
+  {
+    id: 'n4', line: 'N', title: 'Le direct de Rambouillet', from: 0, to: 16, stops: [8, 16], clock: [18, 12], need: 3, weather: 'clear', light: 0.32,
+    lineLimit: 160,
+    blurb: 'Montparnasse → Versailles-Chantiers → Rambouillet sans arrêt entre les deux : 160 km/h autorisés sur la grande ligne. Les petites gares défilent, ne t\'y arrête pas. Une Regio 2N aide beaucoup.',
+    build: (h) => {
+      h.limit(0, 1, 0, 0.7, 60, 'Faisceau Montparnasse'); h.limit(2, 4, 0, 1, 120, 'Courbes de Meudon'); h.limit(7, 8, 0.4, 1, 80, 'Entrée Versailles');
+      h.limit(8, 9, 0, 0.5, 100, 'Bifurcation'); h.signal(10, 11, 0.6, 8, 'TER Centre-Val de Loire devant'); h.animal(14, 15, 0.5);
+      h.passengers(8, 55); h.passengers(16, 25);
+    },
+  },
   // ----- RER C -----
   {
     id: 'c1', line: 'C', title: 'Bord de Seine', from: 7, to: 13, clock: [8, 31], need: 0, weather: 'clear', light: 0.7,
@@ -448,8 +466,8 @@ export function weeklyMission(date = new Date(), forcedKey = null) {
 export function buildRoute(m) {
   const line = lineOf(m);
   const dir = m.to >= m.from ? 1 : -1;
-  const base = line.stations[m.from].km;
-  const xOf = (k) => Math.round(Math.abs(line.stations[k].km - base) * 1000 * SCALE);
+  const base = line.stations[m.from].gx;
+  const xOf = (k) => Math.abs(line.stations[k].gx - base);
   const stations = [];
   for (let k = m.from; ; k += dir) {
     const short = line.stations[k].quai === 'court';
@@ -528,7 +546,7 @@ export function buildMission(m) {
   return {
     ...m,
     route,
-    lineLimit: route.line.limit,
+    lineLimit: m.lineLimit ?? route.line.limit,
     compo,
     trainLen: compo === 'UM' ? TRAIN_LEN * 2 : TRAIN_LEN,
     // une UM a deux fois plus de portes ; sur un quai court, la deuxième rame reste hors quai

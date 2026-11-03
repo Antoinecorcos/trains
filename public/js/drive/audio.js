@@ -128,4 +128,6 @@ export class Audio {
   bad() { this.tone(160, 0.35, 'sawtooth', 0.1); }
   alarm() { for (let i = 0; i < 3; i++) this.tone(960, 0.12, 'square', 0.06, i * 0.18); }
   click() { this.tone(1600, 0.03, 'square', 0.03); }
+  // passage d'une gare à pleine vitesse : souffle qui descend (effet Doppler)
+  whoosh() { this.tone(880, 0.18, 'sawtooth', 0.04); this.tone(520, 0.3, 'sawtooth', 0.04, 0.12); }
 }
