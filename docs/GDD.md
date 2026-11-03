@@ -16,9 +16,10 @@
 
 | Pilier | Ce qui est en place |
 |---|---|
-| **Cœur** | Conduite d'une rame : manipulateur traction/freinage, arrêt pile au repère (PARFAIT < 0,5 m), combos, fermeture des portes au bon moment, horaire à tenir, départ verrouillé avant l'heure. |
+| **Cœur** | Conduite d'une rame : manipulateur traction/freinage, arrêt pile au repère (PARFAIT < 0,5 m, noté à l'ouverture des portes), combos, **ouverture et fermeture des portes à la main**, **phares** (pleins phares dans le noir, code en gare), horaire à tenir, départ verrouillé avant l'heure. Étoiles : 2 ★ à 40 % du score de référence, 3 ★ à 68 %. |
+| **Matériel et quais** | Unité simple (US, une rame) ou unité multiple aux heures de pointe (UM, deux rames, plus de voyageurs mais deux fois plus de portes). Quais longs (225 m) ou courts (150 m) : en UM sur un quai court, la deuxième rame reste hors quai. |
 | **Aléas** | Signaux fermés, limitations et contrôle de vitesse (KVB), feuilles mortes, pluie et neige (patinage, enrayage), sanglier et agents à prévenir au klaxon, retardataires, jours de grève. |
-| **Réseau** | 5 lignes : **U** (9 missions), **L**, **N**, **RER C**, **RER A** (3 missions chacune), avec tunnels, ponts sur la Seine, Paris, nuit et neige. Les lignes se débloquent par les correspondances et les étoiles (L et N depuis la U, A depuis la L, C depuis la N). |
+| **Réseau** | 5 lignes : **U** (9 missions), **L**, **N** (3 missions chacune), **RER C** de Versailles-Chantiers à Juvisy et **RER A** de Saint-Germain-en-Laye à Boissy-Saint-Léger (5 missions chacune), avec tunnels, ponts sur la Seine, Paris, nuit et neige. Les lignes se débloquent par les correspondances et les étoiles (L et N depuis la U, A depuis la L, C depuis la N). |
 | **Défi du jour** | Ligne, tronçon, météo et aléas tirés au hasard, identiques pour tous, **rame imposée** : à armes égales. |
 | **Collection** | 10 rames (Commun → Mythique) qui conduisent différemment (accélération, freinage, portes, adhérence), 5 niveaux d'amélioration ; 8 livrées visibles par les autres sur leurs fantômes. |
 | **Économie** | Tickets gagnés à chaque partie, pièces détachées, 3 sortes de colis multi-contenu (tirés par le serveur), cadeau quotidien avec série de 7 jours, colis bonus pour les 3 étoiles, les couronnes et le défi du jour. |

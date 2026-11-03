@@ -1,7 +1,7 @@
 // Simulation déterministe de la conduite (pas fixe de 1/60 s).
 // Même code pour le joueur, le conducteur titulaire (IA) et, plus tard, la vérification serveur.
 
-import { buildMission, rameStats, PLATFORM, TRAIN_LEN } from './route.js';
+import { buildMission, rameStats, inTunnel, MISSED_AFTER } from './route.js';
 
 export const DT = 1 / 60;
 const STOP_WINDOW = [-25, 6];
@@ -38,6 +38,13 @@ export function createRun(mission, opts = {}) {
     works: m.works.map((w) => ({ ...w, warned: false, missed: false })),
     passed: new Set(),
     doors: null,
+    waitDoors: null, // instant où le train s'est immobilisé au repère, portes encore fermées
+    reversedD: null,
+    lights: false, // feux de route (pleins phares)
+    lightsT: -9,
+    darkT: 0,
+    lightsWarn: false,
+    dazzled: new Set(),
     kvb: false,
     overspeed: false,
     slip: false,
@@ -48,7 +55,7 @@ export function createRun(mission, opts = {}) {
     bestCombo: 0,
     grades: [],
     arrivals: [],
-    stats: { overspeedT: 0, kvb: 0, spad: 0, hits: 0, slips: 0, missed: 0 },
+    stats: { overspeedT: 0, kvb: 0, spad: 0, hits: 0, slips: 0, missed: 0, darkT: 0, dazzle: 0 },
     comfort: 100,
     frames: [],
     events: [],
@@ -66,7 +73,7 @@ export function createRun(mission, opts = {}) {
 
 export function limitAt(r, x) {
   let l = r.m.lineLimit ?? 100;
-  for (const z of r.m.limits) if (x >= z.from && x <= z.to + TRAIN_LEN * 0.5) l = Math.min(l, z.kmh);
+  for (const z of r.m.limits) if (x >= z.from && x <= z.to + r.m.trainLen * 0.5) l = Math.min(l, z.kmh);
   return l;
 }
 
@@ -95,6 +102,18 @@ export function adhesionAt(r, x) {
   for (const z of r.m.leaves) if (x >= z.from && x <= z.to) a = Math.min(a, 0.45);
   return a;
 }
+
+// Phares : il fait sombre de nuit et dans les tunnels
+export const darkAt = (r, x) => r.m.light < 0.3 || inTunnel(r.m.route, x);
+// Le train entre en gare (ou longe le quai) : on repasse en feux de croisement pour ne pas éblouir
+export function nearPlatform(r) {
+  const s = nextStop(r);
+  if (!s) return false;
+  const d = s.x - r.x;
+  return d < s.plat + 60 && d > -10;
+}
+// Ce que voudrait un bon conducteur : pleins phares dans le noir, sauf à quai
+export const lightsWanted = (r) => darkAt(r, r.x) && !nearPlatform(r) && r.phase === 'run';
 
 export const clockAt = (r) => r.m.clock[0] * 3600 + r.m.clock[1] * 60 + r.t;
 export const schedArr = (r, i) => (r.sched ? r.sched.arr[i] : null);
@@ -127,11 +146,12 @@ export function step(r, input = {}) {
   if (input.lever != null) r.lever = Math.max(-1, Math.min(1, input.lever));
   const hornEdge = !!input.horn;
   if (hornEdge) r.hornT = r.t;
+  if (input.lights) { r.lights = !r.lights; r.lightsT = r.t; emit(r, { type: 'lights', on: r.lights }); }
 
   if (r.phase === 'doors') {
     updateDoors(r, input);
   } else if (r.phase === 'run') {
-    drive(r, hornEdge);
+    drive(r, hornEdge, input);
   } else if (r.phase === 'arrived' && r.t > r.endAt) {
     finish(r);
   }
@@ -139,7 +159,7 @@ export function step(r, input = {}) {
   if (r.step % 6 === 0) r.frames.push(Math.round(r.x * 10) / 10);
 }
 
-function drive(r, hornEdge) {
+function drive(r, hornEdge, input = {}) {
   const { serie } = r;
   const limit = limitAt(r, r.x) / 3.6;
   const adh = adhesionAt(r, r.x);
@@ -188,6 +208,28 @@ function drive(r, hornEdge) {
   if (r.v === 0 && aT === 0) r.a = 0;
   const prevX = r.x;
   r.x += r.v * DT;
+
+  // Phares : pleins phares dans le noir, code à l'approche des quais
+  if (r.v > 3 && darkAt(r, r.x) && !nearPlatform(r) && !r.lights) {
+    r.darkT += DT;
+    if (r.darkT > 2.5) {
+      r.stats.darkT += DT;
+      r.parts.penalty -= 15 * DT;
+      r.score -= 15 * DT;
+      if (!r.lightsWarn) { r.lightsWarn = true; emit(r, { type: 'lightsNeeded' }); }
+    }
+  } else {
+    r.darkT = 0;
+    if (r.lightsWarn && (r.lights || !darkAt(r, r.x))) { r.lightsWarn = false; emit(r, { type: 'lightsOk' }); }
+  }
+  if (r.lights && nearPlatform(r) && r.v > 1 && !r.dazzled.has(r.stopI)) {
+    const s0 = nextStop(r);
+    if (s0.x - r.x < s0.plat) {
+      r.dazzled.add(r.stopI);
+      r.stats.dazzle++;
+      add(r, 'penalty', -60, { type: 'penalty', label: 'Voyageurs éblouis : passe en code' });
+    }
+  }
 
   // Signaux
   for (const s of r.signals) {
@@ -240,7 +282,7 @@ function drive(r, hornEdge) {
   // Arrêts non prévus (semi-direct)
   if (r.v === 0) {
     for (const p of r.m.passes) {
-      if (!r.passed.has(p.k) && r.x > p.x - PLATFORM && r.x < p.x + 6) {
+      if (!r.passed.has(p.k) && r.x > p.x - p.plat && r.x < p.x + 6) {
         r.passed.add(p.k);
         add(r, 'penalty', -200, { type: 'penalty', label: `Arrêt non prévu à ${p.name}` });
       }
@@ -252,17 +294,25 @@ function drive(r, hornEdge) {
   if (!s) return;
   const d = r.x - s.x;
   if (r.v === 0 && r.lever <= 0) {
-    if (d >= STOP_WINDOW[0] && d <= STOP_WINDOW[1]) arrive(r, s, d);
-    else if (d > STOP_WINDOW[1]) {
+    if (d > STOP_WINDOW[1] && d <= MISSED_AFTER) {
       emit(r, { type: 'reverse', label: 'Arrêt dépassé : recul jusqu\'au repère' });
       r.t += 5;
       r.x = s.x;
-      arrive(r, s, d);
-    } else if (d > -PLATFORM && !r.tips.creep) {
+      r.reversedD = d;
+    }
+    const dd = r.x - s.x;
+    if (dd >= STOP_WINDOW[0] && dd <= STOP_WINDOW[1]) {
+      // immobilisé au repère : c'est au conducteur d'ouvrir les portes
+      if (r.waitDoors == null) { r.waitDoors = r.t; emit(r, { type: 'atStop', short: s.short && r.m.compo === 'UM' }); }
+      if (input.door) arrive(r, s, r.reversedD ?? dd);
+    } else if (dd > -s.plat && !r.tips.creep) {
       r.tips.creep = true;
       emit(r, { type: 'tip', id: 'creep' });
     }
-  } else if (d > PLATFORM * 0.6) {
+  } else if (r.v > 0) {
+    r.waitDoors = null;
+  }
+  if (r.v > 0 && d > MISSED_AFTER) {
     r.stats.missed++;
     r.combo = 0;
     r.grades.push({ k: s.k, name: s.name, grade: 'rate', d: null, gap: null });
@@ -275,6 +325,9 @@ function drive(r, hornEdge) {
 function arrive(r, s, d) {
   r.v = 0;
   r.a = 0;
+  const waited = r.t - (r.waitDoors ?? r.t);
+  r.waitDoors = null;
+  r.reversedD = null;
   const ad = Math.abs(d);
   const g = d > STOP_WINDOW[1] ? { id: 'rate', label: 'DÉPASSÉ', pts: 0 } : GRADES.find((x) => ad <= x.max);
   if (g.id === 'parfait' || g.id === 'super') r.combo++;
@@ -298,9 +351,12 @@ function arrive(r, s, d) {
   r.arrivals.push(r.t);
   r.grades.push({ k: s.k, name: s.name, grade: g.id, d, gap });
 
+  if (waited <= 2) add(r, 'doors', 50, { type: 'doors', label: 'Ouverture rapide' });
   const last = r.stopI === r.m.stops.length - 1;
+  const shortUM = s.short && r.m.compo === 'UM';
+  if (shortUM) emit(r, { type: 'shortPlatform', label: 'Quai court : la 2e rame reste hors quai' });
   r.doors = {
-    state: 'opening', t: r.t, pax: s.pax, boarded: 0, fullAt: null, last,
+    state: 'opening', t: r.t, pax: s.pax, boarded: 0, fullAt: null, last, shortUM,
     runner: s.runner ? { state: 'waiting', appearAt: null, arriveAt: null } : null,
   };
   r.phase = 'doors';
@@ -312,7 +368,7 @@ function updateDoors(r, input) {
   const age = r.t - dr.t;
   if (dr.state === 'opening' && age > 0.6) { dr.state = 'open'; dr.t = r.t; }
   if (dr.state === 'open') {
-    const rate = dr.last ? 40 : r.serie.board;
+    const rate = dr.last ? 40 : r.serie.board * r.m.boardMult * (dr.shortUM ? 0.5 : 1);
     dr.boarded = Math.min(dr.pax, dr.boarded + rate * DT);
     if (dr.boarded >= dr.pax && dr.fullAt == null) {
       dr.fullAt = r.t;
@@ -336,7 +392,7 @@ function updateDoors(r, input) {
       emit(r, { type: 'terminus' });
       return;
     }
-    if (input.close && !dr.last) closeDoors(r);
+    if ((input.door || input.close) && !dr.last) closeDoors(r);
   }
   if (dr.state === 'closing' && r.t - dr.t > 0.8) {
     dr.state = 'closed';
@@ -384,13 +440,17 @@ function finish(r) {
   emit(r, { type: 'over' });
 }
 
+// Seuils d'étoiles (en part du score de référence)
+export const STAR2 = 0.4;
+export const STAR3 = 0.68;
+
 export function result(r) {
   const n = r.m.stops.length;
   // Score de référence : arrêts parfaits enchaînés (combo compris), ponctualité et portes parfaites
   let ref = 300 + 100 * (r.m.animals.length + r.m.works.length);
   for (let i = 0; i < n; i++) ref += 500 * (i >= 1 ? 1 + 0.25 * Math.min(i, 6) : 1) + 300 + (i < n - 1 ? 150 : 0);
   const score = Math.round(r.score);
-  const stars = 1 + (score >= ref * 0.55 ? 1 : 0) + (score >= ref * 0.8 ? 1 : 0);
+  const stars = 1 + (score >= ref * STAR2 ? 1 : 0) + (score >= ref * STAR3 ? 1 : 0);
   return {
     score, stars, ref, rame: r.serie.id, level: r.serie.level,
     time: r.t,
@@ -408,12 +468,14 @@ export function result(r) {
 
 export function aiInput(r) {
   const input = { lever: 0 };
+  if (lightsWanted(r) !== r.lights && r.t - r.lightsT > 0.5) input.lights = true;
   if (r.phase === 'doors') {
     const dr = r.doors;
     const runnerPending = dr.runner && dr.runner.state !== 'boarded' && dr.runner.state !== 'missed';
-    input.close = dr.state === 'open' && dr.fullAt != null && !runnerPending && r.t - dr.fullAt > 0.4;
+    input.door = dr.state === 'open' && dr.fullAt != null && !runnerPending && r.t - dr.fullAt > 0.4;
     return input;
   }
+  if (r.waitDoors != null && r.t - r.waitDoors > 0.3) { input.door = true; input.lever = -0.4; return input; }
   const b = Math.min(1.1, 1.6 * adhesionAt(r, r.x) * 0.6);
   const s = nextStop(r);
   let vt = limitAt(r, r.x) / 3.6 - 0.6;
@@ -459,24 +521,27 @@ export function computeSchedule(mission) {
 // Journal des commandes : permet au serveur de rejouer la partie et de recalculer le score
 // ---------------------------------------------------------------------------
 
-export const newLog = () => ({ n: 0, l: [], h: [], c: [], last: 0 });
+// c : appuis sur la commande des portes (ouvrir puis fermer), f : bascules des phares
+export const newLog = () => ({ n: 0, l: [], h: [], c: [], f: [], last: 0 });
 
 export function record(log, input) {
   if (input.lever !== log.last) { log.l.push([log.n, input.lever]); log.last = input.lever; }
   if (input.horn) log.h.push(log.n);
-  if (input.close) log.c.push(log.n);
+  if (input.door) log.c.push(log.n);
+  if (input.lights) log.f.push(log.n);
   log.n++;
 }
 
 export function replay(mission, sched, log, rame) {
   const r = createRun(mission, { sched, rame });
   const horn = new Set(log.h);
-  const close = new Set(log.c);
+  const door = new Set(log.c);
+  const lights = new Set(log.f ?? []);
   let li = 0;
   let lever = 0;
   for (let i = 0; i < log.n && !r.over; i++) {
     while (li < log.l.length && log.l[li][0] === i) { lever = log.l[li][1]; li++; }
-    step(r, { lever, horn: horn.has(i), close: close.has(i) });
+    step(r, { lever, horn: horn.has(i), door: door.has(i), lights: lights.has(i) });
     r.events.length = 0;
   }
   return r;

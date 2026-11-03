@@ -161,7 +161,11 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 .chip.info { background: var(--ok); }
 .chip.limit b { display: inline-grid; place-items: center; min-width: 20px; height: 16px; padding: 0 3px; border-radius: 3px; background: var(--white); color: #111; font-size: 11px; }
 
-.c-buttons { grid-area: btns; display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.c-buttons { grid-area: btns; display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; }
+.cbtn.lights.on { background: #6b5a12; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45), 0 0 18px rgba(255, 230, 140, 0.55); }
+.cbtn.lights.on .cbtn-ico { color: #fff6c2; }
+.cbtn.lights.need { animation: pulse-light 0.8s ease-in-out infinite; }
+@keyframes pulse-light { 50% { box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(255, 174, 0, 0.7); } }
 .cbtn {
   position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 8px;
   height: 52px; border-radius: 12px; background: var(--cab-3); font-weight: 900; font-size: 15px;
@@ -302,7 +306,8 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
     height: 190px;
   }
   #speedo { width: 150px; height: 150px; }
-  .c-buttons { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .c-buttons { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .c-buttons .doors { grid-column: 1 / -1; }
   .cbtn { height: auto; }
   .lever { min-height: 0; }
   .c-name { font-size: 20px; }
@@ -313,7 +318,8 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 @media (max-height: 560px) and (orientation: landscape) {
   #console { height: 150px; grid-template-columns: 120px minmax(0, 1fr) 160px 80px; grid-template-areas: "speed info btns lever"; grid-template-rows: 1fr; }
   #speedo { width: 120px; height: 120px; }
-  .c-buttons { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .c-buttons { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+  .c-buttons .doors { grid-column: 1 / -1; }
   .cbtn { height: auto; }
   .lever { min-height: 0; }
 }

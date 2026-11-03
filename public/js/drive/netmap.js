@@ -9,23 +9,26 @@ const SCHEMA = {
   U: [[15, 3], [15, 4], [15, 5], [15, 6], [14, 7], [13, 8], [11, 10], [10, 11], [9, 12], [8, 13], [7, 14]],
   L: [[20, 4], [19, 3], [18, 2], [17, 2], [16, 2], [15, 3], [15, 4], [15, 5], [15, 6], [14, 7], [13, 8], [12, 8], [11, 8], [10, 8]],
   N: [[20, 9], [19, 10], [18, 11], [17, 12], [16, 12], [15, 12], [14, 12], [13, 12], [11, 10], [10, 11], [9, 12], [8, 13], [7, 14], [6, 15], [6, 16], [6, 17], [6, 18]],
-  C: [[11, 10], [12, 11], [13, 12], [14, 12], [15, 13], [16, 13], [17, 13], [18, 13], [19, 12], [20, 11], [21, 10], [22, 10], [23, 10], [24, 10]],
-  A: [[15, 3], [14, 3], [13, 3], [12, 3], [11, 3], [10, 3], [9, 3], [8, 3]],
+  C: [[11, 10], [12, 11], [13, 12], [14, 12], [15, 13], [16, 13], [17, 13], [18, 13], [19, 12], [20, 11], [21, 10], [22, 10], [23, 10], [24, 10],
+    [25, 11], [26, 12], [26, 13], [26, 14], [26, 15], [26, 16], [26, 17], [26, 18], [26, 19], [25, 20]],
+  A: [[8, 3], [9, 3], [10, 3], [11, 3], [12, 3], [13, 3], [14, 3], [15, 3], [17, 5], [19.5, 5], [22, 5], [23.5, 6.5], [25, 6.5], [26.5, 6.5],
+    [27.5, 6.5], [28.5, 7.5], [28.5, 8.5], [28.5, 9.5], [28.5, 10.5], [28.5, 11.5], [28.5, 12.5], [28.5, 13.5], [28.5, 14.5]],
 };
 // Décalage latéral (px) pour que les lignes passent côte à côte sur les tronçons partagés
 const SIDE = { U: 1, L: -1, N: -1, C: -1, A: 0 };
 const ORDER = ['A', 'C', 'N', 'L', 'U'];
-const PICT_AT = { U: [8.4, 14.9], L: [21.1, 5.1], N: [6, 19.1], C: [25.1, 9.2], A: [6.9, 3] };
+const PICT_AT = { U: [8.4, 14.9], L: [21.1, 3.0], N: [6, 19.1], C: [24.1, 20.9], A: [29.6, 15.3] };
 const LINE_W = 7;
 const GAP = 8;
 
-const SEINE = [[26, 11.3], [24.5, 10.7], [22.5, 10.75], [21, 11.3], [19.8, 12.5], [18.6, 13.75], [16.6, 14.0], [15.6, 13.3], [15.8, 11.4], [15.65, 9.5], [15.75, 7.3], [15.75, 5.5], [16.3, 3.9], [17.6, 3.1], [18.7, 2.4], [19.6, 1.3], [18.6, 0.5], [16.4, 0.7], [14.2, 1.4], [12.4, 2.3], [11.5, 3.2], [10.7, 4.1], [9.7, 3.9], [8.5, 3.1], [8.1, 1.6], [8.6, 0]];
-const FORESTS = [[16.3, 14.8, 1.6, 0.9], [13.3, 9.7, 1.2, 0.8], [8.6, 1.7, 1.8, 0.9], [10.6, 5.4, 1.6, 1.1], [4.6, 17.4, 1.8, 1.6], [17.2, 6.3, 0.9, 1.1], [12.3, 13.6, 1.4, 0.8], [7.6, 10.9, 1.3, 0.9]];
+const SEINE = [[26.6, 21.5], [26.8, 18.5], [26.6, 16.5], [26.8, 14.5], [26.6, 12.6], [25.9, 11.3], [24.5, 10.7], [22.5, 10.75], [21, 11.3], [19.8, 12.5], [18.6, 13.75], [16.6, 14.0], [15.6, 13.3], [15.8, 11.4], [15.65, 9.5], [15.75, 7.3], [15.75, 5.5], [16.3, 3.9], [17.6, 3.1], [18.7, 2.4], [19.6, 1.3], [18.6, 0.5], [16.4, 0.7], [14.2, 1.4], [12.4, 2.3], [11.5, 3.2], [10.7, 4.1], [9.7, 3.9], [8.5, 3.1], [8.1, 1.6], [8.6, 0]];
+const MARNE = [[26.7, 12.2], [27.4, 10.0], [27.8, 8.3], [28.5, 8.0], [29.6, 8.3], [30.2, 10.2], [30.0, 12.2], [29.3, 13.0], [28.5, 13.0], [27.6, 13.3], [27.3, 14.6], [28.2, 16.2], [30.5, 16.8]];
+const FORESTS = [[26.6, 7.7, 1.1, 0.55], [30.3, 15.6, 1.3, 1.0], [16.3, 14.8, 1.6, 0.9], [13.3, 9.7, 1.2, 0.8], [8.6, 1.7, 1.8, 0.9], [10.6, 5.4, 1.6, 1.1], [4.6, 17.4, 1.8, 1.6], [17.2, 6.3, 0.9, 1.1], [12.3, 13.6, 1.4, 0.8], [7.6, 10.9, 1.3, 0.9]];
 const LANDMARKS = [
   { x: 20.85, y: 12.15, kind: 'eiffel' }, { x: 15.9, y: 2.15, kind: 'arche' }, { x: 10.3, y: 9.15, kind: 'chateau' },
-  { x: 7.85, y: 2.15, kind: 'chateau' }, { x: 5.1, y: 18.55, kind: 'chateau' }, { x: 24.6, y: 11.1, kind: 'cathedrale' },
+  { x: 7.85, y: 2.15, kind: 'chateau' }, { x: 5.1, y: 18.55, kind: 'chateau' }, { x: 24.2, y: 9.0, kind: 'cathedrale' }, { x: 26.6, y: 5.7, kind: 'chateau' },
 ];
-const TOWNS = [['PARIS', 22, 6.6, 26], ['Versailles', 9.8, 9.55, 13], ['Saint-Quentin-en-Yvelines', 7.4, 11.75, 12], ['Rambouillet', 4.2, 18.5, 12], ['Nanterre', 12.8, 2.0, 12], ['Saint-Germain', 7.6, 3.85, 12], ['Boulogne', 17.5, 9.2, 12], ['Meudon', 15.6, 15.3, 11]];
+const TOWNS = [['PARIS', 21.3, 8.0, 26], ['Vincennes', 27.4, 5.6, 12], ['Saint-Maur', 29.3, 10.6, 11], ['Vitry', 24.7, 15.0, 12], ['Juvisy', 24.0, 19.2, 12], ['Versailles', 9.8, 9.55, 13], ['Saint-Quentin-en-Yvelines', 7.4, 11.75, 12], ['Rambouillet', 4.2, 18.5, 12], ['Nanterre', 12.8, 2.0, 12], ['Saint-Germain', 7.6, 3.85, 12], ['Boulogne', 17.5, 9.2, 12], ['Meudon', 15.6, 15.3, 11]];
 
 const FONT = '"Nunito Sans", "Avenir Next", Avenir, "Segoe UI", sans-serif';
 const hash = (n) => { let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; };
@@ -89,7 +92,7 @@ export function mountNetMap(host, opts) {
       if (i === 0 || i === LINES[id].stations.length - 1) st.end = true;
     });
   }
-  const major = (st) => st.end || st.lines.length >= 3 || /Paris|Défense|Versailles-Chantiers|Saint-Michel/.test(st.name);
+  const major = (st) => st.end || st.lines.length >= 3 || /Paris|Défense|Versailles-Chantiers|Saint-Michel|Châtelet|Austerlitz|Nation/.test(st.name);
 
   // trains animés
   const trains = [];
@@ -114,7 +117,7 @@ export function mountNetMap(host, opts) {
     const top = 108;
     const bot = 180;
     let pts = Object.values(SCHEMA).flat();
-    if (focus && W < 640) pts = SCHEMA[focus].concat(SCHEMA.A.slice(0, 2), SCHEMA.L.slice(3, 6));
+    if (focus && W < 640) pts = SCHEMA[focus].concat(SCHEMA.A.slice(6, 8), SCHEMA.L.slice(3, 6));
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
     const minX = Math.min(...xs) - 1.6;
@@ -144,8 +147,8 @@ export function mountNetMap(host, opts) {
     for (let x = ox; x < W; x += step) for (let y = oy; y < H; y += step) ctx.fillRect(x - 1, y - 1, 2, 2);
 
     // Paris
-    const [px0, py0] = S([19.2, 3.2]);
-    const [px1, py1] = S([25.4, 11.9]);
+    const [px0, py0] = S([16.5, 3.7]);
+    const [px1, py1] = S([25.7, 11.9]);
     ctx.fillStyle = 'rgba(255,255,255,0.04)';
     ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = 2;
@@ -180,19 +183,21 @@ export function mountNetMap(host, opts) {
     }
 
     // la Seine
-    const seine = SEINE.map(S);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#2459c4';
-    ctx.lineWidth = Math.max(8, view.u * 0.42);
-    ctx.beginPath(); smooth(ctx, seine); ctx.stroke();
-    ctx.strokeStyle = 'rgba(150,200,255,0.45)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([view.u * 0.5, view.u * 0.7]);
-    ctx.lineDashOffset = -time * view.u * 0.4;
-    ctx.beginPath(); smooth(ctx, seine); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.lineDashOffset = 0;
+    for (const [river, wd] of [[SEINE, 0.42], [MARNE, 0.3]]) {
+      const pts = river.map(S);
+      ctx.strokeStyle = '#2459c4';
+      ctx.lineWidth = Math.max(6, view.u * wd);
+      ctx.beginPath(); smooth(ctx, pts); ctx.stroke();
+      ctx.strokeStyle = 'rgba(150,200,255,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([view.u * 0.5, view.u * 0.7]);
+      ctx.lineDashOffset = -time * view.u * 0.4;
+      ctx.beginPath(); smooth(ctx, pts); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
 
     // villes
     for (const [name, gx, gy, size] of TOWNS) {
@@ -316,6 +321,15 @@ export function mountNetMap(host, opts) {
     // emplacement des pictogrammes (réservé pour que les noms ne passent pas dessous)
     const picts = ORDER.map((id) => { const [x, y] = S(PICT_AT[id]); return { id, x, y, s: selected === id ? 34 : 28 }; });
     const placed = picts.map((q) => [q.x - q.s / 2 - 8, q.y - q.s / 2 - 32, q.s + 16, q.s + 58]);
+    // obstacles : gares et tracés (un nom ne doit pas recouvrir une autre ligne)
+    const obst = hits.filter((h) => h.type === 'station').map((h) => [h.x, h.y, null, h.name]);
+    for (const id of ORDER) {
+      const p = paths[id];
+      for (let i = 1; i < p.length; i++) {
+        const n = Math.ceil(Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]) / 7);
+        for (let j = 1; j < n; j++) obst.push([p[i - 1][0] + ((p[i][0] - p[i - 1][0]) * j) / n, p[i - 1][1] + ((p[i][1] - p[i - 1][1]) * j) / n, id, null]);
+      }
+    }
     placed.push([W - 60, 140, 60, 150]); // boutons de zoom
 
     // étiquettes : taille fixe, placées sans chevauchement (les plus importantes d'abord)
@@ -336,6 +350,9 @@ export function mountNetMap(host, opts) {
         const box = [lb.x + dx - 3, lb.y + dy, tw + 6, th];
         if (box[0] < 4 || box[0] + box[2] > W - 4 || box[1] < 96 || box[1] + box[3] > H - 4) continue;
         if (placed.some((b) => !(box[0] + box[2] < b[0] || b[0] + b[2] < box[0] || box[1] + box[3] < b[1] || b[1] + b[3] < box[1]))) continue;
+        // pas sur une autre ligne ni sur une autre gare (le tracé de ses propres lignes est toléré)
+        if (obst.some(([ox, oy, line, name]) => (line ? !lb.st.lines.includes(line) : name !== lb.st.name)
+          && ox > box[0] - 2 && ox < box[0] + box[2] + 2 && oy > box[1] - 2 && oy < box[1] + box[3] + 2)) continue;
         ok = box;
         break;
       }

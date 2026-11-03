@@ -8,6 +8,14 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.1 — au pupitre
+
+- **Portes à la main** : à l'arrêt, c'est toi qui ouvres (bouton Portes, ou **Entrée** sur PC), puis tu refermes avec la même commande. Tant que les portes sont fermées, tu peux encore avancer doucement jusqu'au repère : l'arrêt est noté à l'ouverture.
+- **Phares** : pleins phares de nuit et dans les tunnels (bouton Phares, ou **L**), code en entrant en gare pour ne pas éblouir les voyageurs. Sans phares, on ne voit presque rien devant.
+- **Trains longs et quais courts** : aux heures de pointe, deux rames attelées (UM, 208 m) ; certaines gares ont un quai court où la deuxième rame reste hors quai (montée plus lente).
+- **Étoiles plus accessibles** : 2 ★ à 40 % du score de référence, 3 ★ à 68 %.
+- **RER A complet de Saint-Germain-en-Laye à Boissy-Saint-Léger** (tronc central sous Paris, la Marne) et **RER C jusqu'à Juvisy** (Austerlitz, les bords de Seine) : 4 nouvelles missions.
+
 ## V2 — ton réseau, tes potes
 
 - **Carte façon plan Transilien** : tracés à 45°, correspondances en pastilles, noms qui ne grossissent pas au zoom, Seine animée, trains qui circulent.
@@ -30,9 +38,9 @@ Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
 Tu conduis la Z 2N de la ligne U, gare par gare. Missions de 4 à 6 arrêts (environ 4 à 5 min), et la ligne complète pour les acharnés.
 
-- **Manipulateur** (à droite) : vers le haut = traction, vers le bas = freinage, tout en bas = freinage d'urgence. Au clavier : flèches haut/bas, `0` pour le neutre.
+- **Manipulateur** (à droite) : vers le haut = traction, vers le bas = freinage, tout en bas = freinage d'urgence. Au clavier : flèches haut/bas, `0` pour le neutre, `Entrée` pour les portes, `L` pour les phares, espace pour le klaxon.
 - **Arrêt précis** : s'arrêter pile sur le repère en bout de quai. PARFAIT (< 0,5 m), SUPER, BIEN, OK… Les arrêts parfaits enchaînés font monter le combo.
-- **Portes** : fermer dès que tout le monde est monté (trop tôt = voyageurs restés à quai, trop tard = temps perdu). Parfois un retardataire court sur le quai.
+- **Portes** : les ouvrir une fois arrêté au repère, puis les fermer dès que tout le monde est monté (trop tôt = voyageurs restés à quai, trop tard = temps perdu). Parfois un retardataire court sur le quai.
 - **Horaire** : arriver pile à l'heure rapporte des points ; impossible de repartir avant l'heure de départ.
 - **Aléas** : signaux fermés (train de la L ou de la N devant), limitations (KVB si survitesse), feuilles mortes et pluie (patinage, enrayage), sanglier et agents sur la voie (klaxon !).
 - **Fantôme** : le conducteur titulaire, puis ton propre record, roulent avec toi.

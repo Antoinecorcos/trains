@@ -1,8 +1,8 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
-import { MISSIONS, dailyMission, weeklyMission, PLATFORM, lineOf, buildRoute } from './route.js';
+import { MISSIONS, dailyMission, weeklyMission, lineOf, buildRoute } from './route.js';
 import { SABOTAGES } from './reseau.js';
 import {
-  DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt,
+  DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
@@ -33,7 +33,8 @@ let last = performance.now();
 let lever = 0;
 let hornEdge = false;
 let hornHeld = false;
-let closeReq = false;
+let doorReq = false;
+let lightsReq = false;
 let toastTimer = 0;
 let runLog = null;
 let ghostChoice = null; // { type: 'titulaire' | 'me' | 'player', pseudo }
@@ -170,7 +171,8 @@ async function startMission(m) {
   lever = 0;
   acc = 0;
   hornEdge = false;
-  closeReq = false;
+  doorReq = false;
+  lightsReq = false;
   world.zoom = 1;
   $('mission-title').textContent = m.title;
   const lp = $('line-pict');
@@ -226,11 +228,12 @@ function frame(ts) {
   if (run && running && !paused && !run.over) {
     acc += dt * SPEED;
     while (acc >= DT && !run.over) {
-      const input = { lever, horn: hornEdge, close: closeReq };
+      const input = { lever, horn: hornEdge, door: doorReq, lights: lightsReq };
       record(runLog, input);
       step(run, input);
       hornEdge = false;
-      closeReq = false;
+      doorReq = false;
+      lightsReq = false;
       acc -= DT;
     }
     handleEvents();
@@ -291,6 +294,7 @@ function handleEvents() {
         setTimeout(() => pop(ev.label, ev.pts ? `+${ev.pts}` : '', ev.pts >= 300 ? 'super small' : ev.pts ? 'bien small' : 'rate small'), 650);
         break;
       case 'doors':
+        if (ev.label === 'Ouverture rapide') { setTimeout(() => pop(ev.label, `+${ev.pts}`, 'bien small'), 1300); break; }
         pop(ev.label, ev.pts > 0 ? `+${ev.pts}` : `${ev.pts}`, ev.pts > 100 ? 'super small' : ev.pts >= 0 ? 'bien small' : 'rate small');
         break;
       case 'bonus':
@@ -312,9 +316,23 @@ function handleEvents() {
         toast(ev.label);
         audio.bad();
         break;
+      case 'atStop':
+        audio.click();
+        tip('open', 'Train à quai : ouvre les portes (bouton Portes, ou Entrée au clavier). Tu peux encore avancer doucement avant d\'ouvrir.');
+        break;
       case 'doorsOpen':
         audio.chime();
-        if (run.m.tutorial && !ev.last) tip('doors', 'Les voyageurs montent. Ferme les portes dès que la barre jaune est pleine.', true);
+        if (!ev.last) tip('doors', 'Les voyageurs montent. Ferme les portes (même bouton, ou Entrée) dès que la barre est pleine.');
+        break;
+      case 'shortPlatform':
+        pop('Quai court', 'la 2e rame reste hors quai · montée plus lente', 'rate small');
+        break;
+      case 'lights':
+        audio.click();
+        break;
+      case 'lightsNeeded':
+        tip('lights', 'Il fait noir : allume les pleins phares (bouton Phares, ou L). Repasse en code en entrant en gare.');
+        audio.bad();
         break;
       case 'doorsClosing':
         audio.doorBeep();
@@ -465,6 +483,8 @@ function updateHud() {
   else if (adh < 1) chips.push('<span class="chip info">Rails mouillés</span>');
   if (r.kvb) alert = { cls: 'red', text: 'KVB · freinage d\'urgence' };
   else if (r.overspeed) alert = { cls: 'red', text: `Survitesse · limite ${lim}` };
+  if (r.lightsWarn) chips.unshift('<span class="chip red">Il fait noir · allume les phares (L)</span>');
+  else if (r.lights && nearPlatform(r) && r.phase === 'run') chips.unshift('<span class="chip warn">Entrée en gare · passe en code (L)</span>');
   if (r.sched && r.phase === 'run' && r.t < r.depAt) chips.push('<span class="chip info">Départ verrouillé</span>');
   $('chips').innerHTML = chips.slice(0, 3).join('');
   const al = $('alert');
@@ -483,7 +503,17 @@ function updateHud() {
   // portes
   const db = $('btn-doors');
   const dr = r.doors;
-  if (r.phase === 'doors' && dr && !dr.last) {
+  const lb = $('btn-lights');
+  lb.classList.toggle('on', r.lights);
+  lb.classList.toggle('need', r.phase === 'run' && lightsWanted(r) !== r.lights && (r.lights || r.v > 1));
+  $('lights-lbl').textContent = r.lights ? 'Phares' : 'Code';
+  if (r.phase === 'run' && r.waitDoors != null) {
+    db.disabled = false;
+    db.classList.add('ready');
+    db.classList.remove('boarding');
+    $('doors-lbl').textContent = 'Ouvrir les portes';
+    $('doors-fill').style.width = '0';
+  } else if (r.phase === 'doors' && dr && !dr.last) {
     const full = dr.fullAt != null;
     db.disabled = dr.state !== 'open';
     db.classList.toggle('ready', dr.state === 'open' && full);
@@ -496,7 +526,7 @@ function updateHud() {
     $('doors-lbl').textContent = 'Portes';
     $('doors-fill').style.width = '0';
   }
-  if (r.m.tutorial && r.phase === 'run' && r.v < 0.1 && r.lever <= 0 && r.stopI > 0 && r.x < (nextStop(r)?.x ?? 0) - PLATFORM) {
+  if (r.m.tutorial && r.phase === 'run' && r.v < 0.1 && r.lever <= 0 && r.stopI > 0 && r.x < (nextStop(r)?.x ?? 0) - (nextStop(r)?.plat ?? 150)) {
     tip('depart', 'Portes fermées : remets de la traction pour repartir.');
   }
 }
@@ -636,7 +666,8 @@ function bindButtons() {
   horn.addEventListener('pointerup', hornOff);
   horn.addEventListener('pointerleave', hornOff);
   horn.addEventListener('pointercancel', hornOff);
-  $('btn-doors').addEventListener('pointerdown', (e) => { e.preventDefault(); closeReq = true; });
+  $('btn-doors').addEventListener('pointerdown', (e) => { e.preventDefault(); doorReq = true; });
+  $('btn-lights').addEventListener('pointerdown', (e) => { e.preventDefault(); lightsReq = true; });
 
   window.addEventListener('keydown', (e) => {
     if (!run || !running || e.target.tagName === 'INPUT') return;
@@ -645,7 +676,8 @@ function bindButtons() {
     else if (k === 'arrowdown' || k === 's') { setLever(lever - 0.1); e.preventDefault(); }
     else if (k === '0' || k === 'n') setLever(0);
     else if (k === ' ' || k === 'h') { if (!e.repeat) hornOn(e); }
-    else if (k === 'enter' || k === 'd') closeReq = true;
+    else if (k === 'enter' || k === 'd') { e.preventDefault(); if (!e.repeat) doorReq = true; }
+    else if (k === 'l' || k === 'f') { if (!e.repeat) lightsReq = true; }
     else if (k === 'escape' || k === 'p') setPaused(true);
   });
   window.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key.toLowerCase() === 'h') hornOff(); });
@@ -727,7 +759,7 @@ function showEnd() {
 async function sendRun(m, log, g) {
   const el = $('tk-online');
   try {
-    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c }, g);
+    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c, f: log.f }, g);
     let html;
     if (r.crown && r.dethroned) html = `👑 <b>Tu prends la tête</b> et tu détrônes <b>${esc(r.dethroned)}</b> !`;
     else if (r.crown) html = r.players > 1 ? '👑 <b>Tu gardes la tête</b> du classement.' : '👑 <b>Premier au classement</b> de cette mission.';
@@ -800,4 +832,4 @@ function boot() {
 }
 
 boot();
-window.__ukipu = { get run() { return run; }, setLever, ai: () => aiInput(run), close: () => { closeReq = true; }, horn: () => { hornEdge = true; }, start: (id) => startMission(allMissions().find((m) => m.id === id)) };
+window.__ukipu = { get run() { return run; }, setLever, ai: () => aiInput(run), door: () => { doorReq = true; }, lights: () => { lightsReq = true; }, horn: () => { hornEdge = true; }, start: (id) => startMission(allMissions().find((m) => m.id === id)) };

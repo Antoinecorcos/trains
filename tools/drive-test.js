@@ -12,7 +12,7 @@ for (const m of [...MISSIONS, dailyMission(), weeklyMission(), ...sabotaged]) {
   let n = 0;
   while (!r.over && n++ < 60 * 1200) {
     const i = aiInput(r);
-    i.lever = Math.round(i.lever * 100) / 100; i.horn = !!i.horn; i.close = !!i.close;
+    i.lever = Math.round(i.lever * 100) / 100; i.horn = !!i.horn; i.door = !!i.door; i.lights = !!i.lights;
     record(log, i); step(r, i); r.events.length = 0;
   }
   const res = r.result;

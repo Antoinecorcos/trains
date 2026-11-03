@@ -1,7 +1,7 @@
 // Accueil : carte du réseau, départs par ligne, dépôt (collection, colis), classement, fiche mission.
 import {
   MISSIONS, LINES, LINE_UNLOCK, RAMES, LIVREES, RARITIES, BOX_SHOP, MAX_LEVEL, levelCost,
-  dailyMission, weeklyMission, dailyKey, lineOf, buildRoute,
+  dailyMission, weeklyMission, dailyKey, lineOf, buildRoute, compoOf,
 } from './route.js';
 import {
   RENOV, MAX_STATION, STATIONS, ROLES, SABOTAGES, CHANTIER_SLOTS, staffPower, staffText, withSabotage, SABOTAGE_FOIL_STARS,
@@ -697,6 +697,11 @@ export function showBrief(m) {
   const probe = { limits: 0, signals: 0, leaves: 0, animals: 0, works: 0 };
   m.build({ limit: () => probe.limits++, signal: () => probe.signals++, leaves: () => probe.leaves++, animal: () => probe.animals++, works: () => probe.works++, runner: () => {}, passengers: () => {} });
   const cond = [];
+  const um = compoOf(m) === 'UM';
+  cond.push(um ? '<span class="pill pill-led">Train long · 2 rames (UM)</span>' : '<span class="pill pill-ok">Train court · 1 rame (US)</span>');
+  const shorts = route.stations.slice(1).filter((st) => st.short && stops.includes(st.k)).length;
+  if (um && shorts) cond.push(`<span class="pill pill-late">${shorts} quai${shorts > 1 ? 's' : ''} court${shorts > 1 ? 's' : ''} · 2e rame hors quai</span>`);
+  if (m.light < 0.3 || route.tunnels.length) cond.push('<span class="pill pill-off">Phares à gérer</span>');
   if (m.weather === 'rain') cond.push('<span class="pill pill-ok">Pluie · rails glissants</span>');
   if (m.weather === 'snow') cond.push('<span class="pill pill-ok">Neige · freinages longs</span>');
   if (m.light < 0.2) cond.push('<span class="pill pill-off">Nuit</span>');

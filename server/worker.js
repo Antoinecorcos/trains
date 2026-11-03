@@ -242,7 +242,7 @@ async function me(env, user) {
 // ---------------------------------------------------------------------------
 
 async function scheduleFor(env, mission) {
-  const key = `${mission.id}@2`;
+  const key = `${mission.id}@3`;
   const row = await env.DB.prepare('SELECT data FROM schedules WHERE mission = ?').bind(key).first();
   if (row) return JSON.parse(row.data);
   const s = computeSchedule(mission);
@@ -272,9 +272,10 @@ function checkMission(id) {
 function checkLog(log) {
   const ok = log && Number.isInteger(log.n) && log.n > 0 && log.n < 60 * 60 * 20
     && Array.isArray(log.l) && Array.isArray(log.h) && Array.isArray(log.c)
-    && log.l.length < 20000 && log.h.length < 2000 && log.c.length < 200
+    && log.l.length < 20000 && log.h.length < 2000 && log.c.length < 400
     && log.l.every((e) => Array.isArray(e) && Number.isInteger(e[0]) && typeof e[1] === 'number' && e[1] >= -1 && e[1] <= 1)
-    && log.h.every(Number.isInteger) && log.c.every(Number.isInteger);
+    && log.h.every(Number.isInteger) && log.c.every(Number.isInteger)
+    && (log.f == null || (Array.isArray(log.f) && log.f.length < 4000 && log.f.every(Number.isInteger)));
   if (!ok) throw new HttpError(400, 'Journal de conduite invalide.');
 }
 

@@ -5,8 +5,17 @@
 import { mulberry32 } from '../rng.js';
 
 const SCALE = 0.19;
-export const PLATFORM = 150; // longueur de quai (m), le repère d'arrêt est en bout de quai
-export const TRAIN_LEN = 104; // une rame de 4 voitures
+export const PLATFORM = 150; // quai court (m), le repère d'arrêt est en bout de quai
+export const PLATFORM_LONG = 225; // quai long : accueille un train long (deux rames)
+export const TRAIN_LEN = 104; // une rame de 4 voitures (unité simple, US)
+export const MISSED_AFTER = 90; // au-delà de ce dépassement du repère, la gare est brûlée
+
+// Composition : unité simple (US, une rame) ou unité multiple (UM, deux rames attelées) aux heures de pointe
+export function compoOf(m) {
+  if (m.compo) return m.compo;
+  const h = m.clock[0] + m.clock[1] / 60;
+  return (h >= 7 && h < 9.5) || (h >= 17 && h < 19.5) ? 'UM' : 'US';
+}
 
 // ---------------------------------------------------------------------------
 // Lignes
@@ -16,11 +25,11 @@ export const TRAIN_LEN = 104; // une rame de 4 voitures
 const S = (name, lon, lat, region, extra = {}) => ({ name, lon, lat, region, ...extra });
 
 const DEF = S('La Défense', 2.2386, 48.8920, 'defense');
-const PUT = S('Puteaux', 2.2343, 48.8838, 'urban');
+const PUT = S('Puteaux', 2.2343, 48.8838, 'urban', { quai: 'court' });
 const SUR = S('Suresnes-Mont-Valérien', 2.2210, 48.8712, 'urban');
 const STC = S('Saint-Cloud', 2.2178, 48.8457, 'forest');
 const SEV = S("Sèvres-Ville-d'Avray", 2.1962, 48.8247, 'forest');
-const CHA = S('Chaville-Rive-Droite', 2.1886, 48.8080, 'forest');
+const CHA = S('Chaville-Rive-Droite', 2.1886, 48.8080, 'forest', { quai: 'court' });
 const VCH = S('Versailles-Chantiers', 2.1350, 48.7951, 'versailles');
 const CYR = S('Saint-Cyr', 2.0727, 48.7993, 'plain');
 const SQY = S('Saint-Quentin-en-Yvelines', 2.0438, 48.7874, 'newtown');
@@ -40,10 +49,10 @@ export const LINES = {
   L: {
     id: 'L', name: 'Ligne L', kind: 'Transilien', color: '#7B83C2', ink: '#ffffff', limit: 100, rame: 'Z50000',
     stations: [
-      S('Paris-Saint-Lazare', 2.3253, 48.8763, 'paris'), S('Clichy-Levallois', 2.3004, 48.8971, 'urban'),
+      S('Paris-Saint-Lazare', 2.3253, 48.8763, 'paris'), S('Clichy-Levallois', 2.3004, 48.8971, 'urban', { quai: 'court' }),
       S('Asnières-sur-Seine', 2.2843, 48.9055, 'urban'), S('Bécon-les-Bruyères', 2.2688, 48.9054, 'urban'),
       S('Courbevoie', 2.2570, 48.8981, 'urban'), DEF, PUT, SUR, STC, SEV, CHA,
-      S('Viroflay-Rive-Droite', 2.1723, 48.8021, 'forest'), S('Montreuil', 2.1450, 48.8060, 'versailles'),
+      S('Viroflay-Rive-Droite', 2.1723, 48.8021, 'forest'), S('Montreuil', 2.1450, 48.8060, 'versailles', { quai: 'court' }),
       S('Versailles-Rive-Droite', 2.1350, 48.8093, 'versailles'),
     ],
     bridges: [{ a: 1, b: 2, f: 0.55, len: 170 }],
@@ -51,35 +60,56 @@ export const LINES = {
   N: {
     id: 'N', name: 'Ligne N', kind: 'Transilien', color: '#1FA38C', ink: '#ffffff', limit: 120, rame: 'Regio2N',
     stations: [
-      S('Paris-Montparnasse', 2.3200, 48.8412, 'paris'), S('Vanves-Malakoff', 2.2879, 48.8205, 'urban'),
-      S('Clamart', 2.2655, 48.8136, 'urban'), S('Meudon', 2.2441, 48.8145, 'urban'), S('Bellevue', 2.2246, 48.8183, 'forest'),
+      S('Paris-Montparnasse', 2.3200, 48.8412, 'paris'), S('Vanves-Malakoff', 2.2879, 48.8205, 'urban', { quai: 'court' }),
+      S('Clamart', 2.2655, 48.8136, 'urban'), S('Meudon', 2.2441, 48.8145, 'urban'), S('Bellevue', 2.2246, 48.8183, 'forest', { quai: 'court' }),
       S('Sèvres-Rive-Gauche', 2.2106, 48.8214, 'forest'), CHV, VRG, VCH, CYR, SQY, TRA, LVE,
-      S('Coignières', 1.9203, 48.7521, 'fields'), S('Les Essarts-le-Roi', 1.8951, 48.7163, 'forest'),
-      S('Le Perray', 1.8556, 48.6940, 'fields'), S('Rambouillet', 1.8324, 48.6447, 'chateau'),
+      S('Coignières', 1.9203, 48.7521, 'fields'), S('Les Essarts-le-Roi', 1.8951, 48.7163, 'forest', { quai: 'court' }),
+      S('Le Perray', 1.8556, 48.6940, 'fields', { quai: 'court' }), S('Rambouillet', 1.8324, 48.6447, 'chateau'),
     ],
   },
   C: {
     id: 'C', name: 'RER C', kind: 'RER', color: '#E8C21C', ink: '#1d1d1d', limit: 90, rame: 'Z20500',
     stations: [
-      VCH, S('Porchefontaine', 2.1530, 48.7975, 'versailles'), VRG, CHV,
+      VCH, S('Porchefontaine', 2.1530, 48.7975, 'versailles', { quai: 'court' }), VRG, CHV,
       S('Meudon-Val-Fleury', 2.2410, 48.8090, 'urban'), S('Issy', 2.2590, 48.8232, 'urban'),
       S('Issy-Val-de-Seine', 2.2630, 48.8303, 'river'), S('Pont du Garigliano', 2.2700, 48.8392, 'river'),
-      S('Javel', 2.2780, 48.8460, 'river'), S('Champ de Mars-Tour Eiffel', 2.2898, 48.8558, 'eiffel'),
+      S('Javel', 2.2780, 48.8460, 'river', { quai: 'court' }), S('Champ de Mars-Tour Eiffel', 2.2898, 48.8558, 'eiffel'),
       S("Pont de l'Alma", 2.3010, 48.8625, 'paris'), S('Invalides', 2.3140, 48.8621, 'paris'),
       S("Musée d'Orsay", 2.3255, 48.8600, 'paris'), S('Saint-Michel Notre-Dame', 2.3454, 48.8534, 'paris'),
+      S("Gare d'Austerlitz", 2.3650, 48.8424, 'paris'), S('Bibliothèque François Mitterrand', 2.3765, 48.8298, 'newtown'),
+      S('Ivry-sur-Seine', 2.3900, 48.8148, 'urban'), S('Vitry-sur-Seine', 2.4030, 48.7999, 'urban'),
+      S('Les Ardoines', 2.4113, 48.7838, 'river'), S('Choisy-le-Roi', 2.4085, 48.7636, 'river'),
+      S('Villeneuve-le-Roi', 2.4250, 48.7357, 'urban'), S('Ablon', 2.4205, 48.7254, 'river', { quai: 'court' }),
+      S('Athis-Mons', 2.4060, 48.7130, 'urban'), S('Juvisy', 2.3830, 48.6893, 'urban'),
     ],
-    tunnels: [{ a: 3, b: 4, f0: 0.25, f1: 0.8 }, { a: 9, b: 10, f0: 0.45, f1: 1 }, { a: 10, b: 13, f0: 0, f1: 1 }],
+    tunnels: [{ a: 3, b: 4, f0: 0.25, f1: 0.8 }, { a: 9, b: 10, f0: 0.45, f1: 1 }, { a: 10, b: 13, f0: 0, f1: 1 }, { a: 13, b: 14, f0: 0, f1: 1 }, { a: 14, b: 15, f0: 0, f1: 0.5 }],
   },
   A: {
+    // Branche A1 (Saint-Germain-en-Laye) → tronc parisien → branche A2 (Boissy-Saint-Léger)
     id: 'A', name: 'RER A', kind: 'RER', color: '#E3051C', ink: '#ffffff', limit: 100, rame: 'MI09',
     stations: [
-      DEF, S('Nanterre-Préfecture', 2.2140, 48.8960, 'newtown'), S('Nanterre-Ville', 2.1970, 48.8950, 'urban'),
-      S('Rueil-Malmaison', 2.1720, 48.8790, 'urban'), S('Chatou-Croissy', 2.1560, 48.8860, 'river'),
-      S('Le Vésinet-Centre', 2.1310, 48.8920, 'forest'), S('Le Vésinet-Le Pecq', 2.1150, 48.8970, 'river'),
-      S('Saint-Germain-en-Laye', 2.0940, 48.8980, 'chateau'),
+      S('Saint-Germain-en-Laye', 2.0940, 48.8980, 'chateau'), S('Le Vésinet-Le Pecq', 2.1150, 48.8970, 'river'),
+      S('Le Vésinet-Centre', 2.1310, 48.8920, 'forest'), S('Chatou-Croissy', 2.1560, 48.8860, 'river'),
+      S('Rueil-Malmaison', 2.1720, 48.8790, 'urban'), S('Nanterre-Ville', 2.1970, 48.8950, 'urban'),
+      S('Nanterre-Préfecture', 2.2140, 48.8960, 'newtown'), DEF,
+      S('Charles de Gaulle-Étoile', 2.2950, 48.8738, 'paris'), S('Auber', 2.3300, 48.8722, 'paris'),
+      S('Châtelet-Les Halles', 2.3470, 48.8617, 'paris'), S('Gare de Lyon', 2.3740, 48.8443, 'paris'),
+      S('Nation', 2.3958, 48.8483, 'paris'), S('Vincennes', 2.4334, 48.8473, 'chateau'),
+      S('Fontenay-sous-Bois', 2.4630, 48.8445, 'urban'), S('Nogent-sur-Marne', 2.4730, 48.8346, 'river'),
+      S('Joinville-le-Pont', 2.4640, 48.8212, 'river'), S('Saint-Maur-Créteil', 2.4720, 48.8066, 'urban'),
+      S('Le Parc de Saint-Maur', 2.4920, 48.8053, 'urban'), S('Champigny', 2.5145, 48.8105, 'urban'),
+      S('La Varenne-Chennevières', 2.5157, 48.7945, 'river'), S('Sucy-Bonneuil', 2.5080, 48.7705, 'newtown'),
+      S('Boissy-Saint-Léger', 2.5110, 48.7510, 'forest'),
     ],
-    tunnels: [{ a: 0, b: 1, f0: 0, f1: 0.85 }, { a: 6, b: 7, f0: 0.55, f1: 1 }],
-    bridges: [{ a: 3, b: 4, f: 0.55, len: 190 }, { a: 6, b: 7, f: 0.25, len: 150 }],
+    tunnels: [
+      { a: 1, b: 0, f0: 0.55, f1: 1 }, { a: 7, b: 6, f0: 0, f1: 0.85 }, // Saint-Germain, La Défense
+      { a: 7, b: 13, f0: 0, f1: 1 }, // tout le tronc central, de La Défense à Vincennes
+      { a: 16, b: 17, f0: 0.55, f1: 1 }, { a: 17, b: 18, f0: 0, f1: 0.45 }, // Saint-Maur
+    ],
+    bridges: [
+      { a: 4, b: 3, f: 0.55, len: 190 }, { a: 1, b: 0, f: 0.25, len: 150 }, // la Seine à Chatou et au Pecq
+      { a: 15, b: 16, f: 0.5, len: 210 }, { a: 20, b: 21, f: 0.3, len: 240 }, // la Marne à Joinville et à La Varenne
+    ],
   },
 };
 
@@ -92,6 +122,14 @@ const hav = (a, b) => {
   return 2 * R * Math.asin(Math.sqrt(h));
 };
 for (const line of Object.values(LINES)) {
+  // un long tunnel est découpé gare par gare : une mission qui n'en parcourt qu'une partie le garde
+  line.tunnels = (line.tunnels ?? []).flatMap((t) => {
+    if (Math.abs(t.b - t.a) <= 1) return [t];
+    const dir = t.b > t.a ? 1 : -1;
+    const out = [];
+    for (let k = t.a; k !== t.b; k += dir) out.push({ a: k, b: k + dir, f0: k === t.a ? t.f0 : 0, f1: k + dir === t.b ? t.f1 : 1 });
+    return out;
+  });
   let km = 0;
   line.stations = line.stations.map((s, i) => {
     if (i > 0 && line.stations[i].km == null) km += Math.max(0.9, hav(line.stations[i - 1], s) * 1.15);
@@ -272,22 +310,42 @@ export const MISSIONS = [
     blurb: 'Treize arrêts de Versailles à Saint-Michel au coucher du soleil. Le grand tour du RER C.',
     build: (h) => { h.limit(3, 4, 0.2, 0.85, 70, 'Tunnel'); h.runner(5); h.signal(7, 8, 0.5, 7, 'Train du RER C devant'); h.runner(9); h.limit(11, 12, 0.2, 0.8, 60, 'Tunnel'); h.passengers(13, 30); },
   },
-  // ----- RER A -----
   {
-    id: 'a1', line: 'A', title: 'Sous La Défense', from: 0, to: 4, clock: [8, 7], need: 0, weather: 'clear', light: 0.65,
+    id: 'c4', line: 'C', title: 'Les quais de la Seine', from: 13, to: 23, clock: [7, 5], need: 5, weather: 'clear', light: 0.55,
+    blurb: 'De Saint-Michel à Juvisy à l\'heure de pointe : Austerlitz sous terre, puis la Seine et les Ardoines.',
+    build: (h) => { h.limit(13, 14, 0, 1, 60, 'Tunnel'); h.runner(15); h.signal(17, 18, 0.5, 7, 'Train du RER C devant'); h.works(18, 19, 0.3, 0.6); h.leaves(20, 21, 0.2, 0.8); h.runner(22); h.passengers(23, 20); },
+  },
+  {
+    id: 'c5', line: 'C', title: 'Dernier train pour Paris', from: 23, to: 13, clock: [23, 38], need: 7, weather: 'rain', light: 0.08,
+    blurb: 'Juvisy → Saint-Michel de nuit, sous la pluie. Pleins phares obligatoires, et Austerlitz au bout du tunnel.',
+    build: (h) => { h.animal(21, 20, 0.5); h.signal(19, 18, 0.5, 8, 'Travaux de nuit'); h.works(16, 15, 0.3, 0.7); h.limit(14, 13, 0, 1, 60, 'Tunnel'); h.runner(14); },
+  },
+  // ----- RER A (gares numérotées de Saint-Germain-en-Laye à Boissy-Saint-Léger) -----
+  {
+    id: 'a1', line: 'A', title: 'Sous La Défense', from: 7, to: 3, clock: [8, 7], need: 0, weather: 'clear', light: 0.65,
     blurb: 'Départ en souterrain sous La Défense, puis la traversée de la Seine vers Chatou.',
-    build: (h) => { h.limit(0, 1, 0, 0.8, 70, 'Tunnel'); h.runner(1); h.signal(2, 3, 0.5, 6, 'Train du RER A devant'); h.passengers(1, 60); },
+    build: (h) => { h.limit(7, 6, 0, 0.8, 70, 'Tunnel'); h.runner(6); h.signal(5, 4, 0.5, 6, 'Train du RER A devant'); h.passengers(6, 60); },
   },
   {
-    id: 'a2', line: 'A', title: 'Boucles de la Seine', from: 3, to: 7, clock: [11, 22], need: 2, weather: 'clear', light: 0.95,
+    id: 'a2', line: 'A', title: 'Boucles de la Seine', from: 4, to: 0, clock: [11, 22], need: 2, weather: 'clear', light: 0.95,
     blurb: 'Deux ponts sur la Seine et l\'arrivée souterraine à Saint-Germain-en-Laye.',
-    build: (h) => { h.leaves(4, 5, 0.3, 0.8); h.animal(5, 6, 0.5); h.limit(6, 7, 0.5, 1, 60, 'Tunnel'); h.passengers(7, 20); },
+    build: (h) => { h.leaves(3, 2, 0.3, 0.8); h.animal(2, 1, 0.5); h.limit(1, 0, 0.5, 1, 60, 'Tunnel'); h.passengers(0, 20); },
   },
   {
-    id: 'a3', line: 'A', title: 'Retour vers Paris', from: 7, to: 0, clock: [8, 48], need: 4, weather: 'rain', light: 0.45,
+    id: 'a3', line: 'A', title: 'Retour vers Paris', from: 0, to: 7, clock: [8, 48], need: 4, weather: 'rain', light: 0.45,
     blurb: 'Saint-Germain → La Défense à l\'heure de pointe, sous la pluie. Les quais de Nanterre débordent.',
     crowd: 1.5,
-    build: (h) => { h.limit(7, 6, 0, 0.5, 60, 'Tunnel'); h.runner(5); h.signal(4, 3, 0.5, 7, 'Train du RER A devant'); h.runner(2); h.limit(1, 0, 0.15, 1, 70, 'Tunnel'); },
+    build: (h) => { h.limit(0, 1, 0, 0.5, 60, 'Tunnel'); h.runner(2); h.signal(3, 4, 0.5, 7, 'Train du RER A devant'); h.runner(5); h.limit(6, 7, 0.15, 1, 70, 'Tunnel'); },
+  },
+  {
+    id: 'a4', line: 'A', title: 'Le tronc central', from: 7, to: 12, clock: [8, 32], need: 5, weather: 'clear', light: 0.9, crowd: 1.3,
+    blurb: 'La Défense → Nation sous Paris, la ligne la plus chargée d\'Europe. Tout en tunnel : phares allumés, code en gare.',
+    build: (h) => { h.limit(7, 8, 0.2, 0.8, 80, 'Tunnel'); h.signal(8, 9, 0.55, 8, 'Train du RER A devant'); h.runner(9); h.signal(10, 11, 0.5, 6, 'Régulation Châtelet'); h.runner(10); h.passengers(10, 70); },
+  },
+  {
+    id: 'a5', line: 'A', title: 'Les boucles de la Marne', from: 12, to: 22, clock: [17, 42], need: 7, weather: 'rain', light: 0.35,
+    blurb: 'Nation → Boissy-Saint-Léger au soir : le bois de Vincennes, deux ponts sur la Marne et le tunnel de Saint-Maur.',
+    build: (h) => { h.limit(12, 13, 0.2, 0.9, 80, 'Tunnel'); h.runner(14); h.leaves(15, 16, 0.2, 0.7); h.limit(17, 18, 0, 0.45, 70, 'Tunnel'); h.works(19, 20, 0.3, 0.6); h.animal(21, 22, 0.5); h.passengers(22, 15); },
   },
 ];
 
@@ -394,7 +452,8 @@ export function buildRoute(m) {
   const xOf = (k) => Math.round(Math.abs(line.stations[k].km - base) * 1000 * SCALE);
   const stations = [];
   for (let k = m.from; ; k += dir) {
-    stations.push({ k, name: line.stations[k].name, region: line.stations[k].region, x: xOf(k) });
+    const short = line.stations[k].quai === 'court';
+    stations.push({ k, name: line.stations[k].name, region: line.stations[k].region, x: xOf(k), short, plat: short ? PLATFORM : PLATFORM_LONG });
     if (k === m.to) break;
   }
   const span = (a, b, f0, f1) => {
@@ -414,7 +473,7 @@ export function buildRoute(m) {
     const c = span(b.a, b.b, b.f, b.f).from;
     return { from: c - b.len / 2, to: c + b.len / 2 };
   });
-  for (const s of stations) s.under = tunnels.some((t) => s.x - PLATFORM >= t.from - 5 && s.x <= t.to + 5);
+  for (const s of stations) s.under = tunnels.some((t) => s.x - s.plat >= t.from - 5 && s.x <= t.to + 5);
   return { line, dir, stations, tunnels, bridges, xOf };
 }
 
@@ -455,18 +514,25 @@ export function buildMission(m) {
     passengers: (k, n) => { course.passengers[k] = n; },
   };
   m.build(h);
-  const crowd = m.crowd ?? 1;
+  const compo = compoOf(m);
+  const crowd = (m.crowd ?? 1) * (compo === 'UM' ? 1.4 : 1);
   const stopIdx = m.stops ?? route.stations.slice(1).map((s) => s.k);
+  const at2 = (k) => route.stations.find((s) => s.k === k);
   const stops = stopIdx.map((k) => ({
     k, name: route.line.stations[k].name, x: route.xOf(k),
     pax: Math.round((course.passengers[k] ?? (k === m.to ? 12 : 26 + ((k * 37) % 30))) * (k === m.to ? 1 : crowd)),
     runner: course.runners.has(k),
+    plat: at2(k).plat, short: at2(k).short,
   }));
-  const passes = route.stations.slice(1).filter((s) => !stopIdx.includes(s.k)).map((s) => ({ k: s.k, name: s.name, x: s.x }));
+  const passes = route.stations.slice(1).filter((s) => !stopIdx.includes(s.k)).map((s) => ({ k: s.k, name: s.name, x: s.x, plat: s.plat }));
   return {
     ...m,
     route,
     lineLimit: route.line.limit,
+    compo,
+    trainLen: compo === 'UM' ? TRAIN_LEN * 2 : TRAIN_LEN,
+    // une UM a deux fois plus de portes ; sur un quai court, la deuxième rame reste hors quai
+    boardMult: compo === 'UM' ? 1.8 : 1,
     start: 0,
     end: route.xOf(m.to),
     stops,

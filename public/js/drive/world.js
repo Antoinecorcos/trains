@@ -1,5 +1,5 @@
 // Vue de côté : ciel, décors en parallaxe selon le quartier, voie, caténaire, quais, Z 2N.
-import { PLATFORM, regionAt as regionOf, RAMES, LIVREES } from './route.js';
+import { regionAt as regionOf, inTunnel, RAMES, LIVREES } from './route.js';
 
 const FONT = '"Nunito Sans", "Avenir Next", Avenir, "Segoe UI", sans-serif';
 const CAR = 26; // longueur d'une voiture (m)
@@ -94,6 +94,7 @@ export class World {
     this.drawBridges(run, now);
     this.drawWeather(run, rain, now);
     this.drawSparks(run);
+    this.drawDark(run);
     if (this.snow) { ctx.fillStyle = 'rgba(220,230,245,0.12)'; ctx.fillRect(0, 0, w, h); }
 
     // Teinte d'ambiance (aube, nuit)
@@ -109,6 +110,20 @@ export class World {
   }
 
   X(wx) { return (wx - this.camX) * this.k; }
+
+  // De nuit ou en tunnel, sans pleins phares on ne voit presque rien devant le train
+  drawDark(run) {
+    const dark = this.light < 0.3 || inTunnel(this.route, run.x);
+    if (!dark) return;
+    const { ctx, k } = this;
+    const nx = this.X(run.x);
+    const a = run.lights ? 0.12 : 0.55;
+    const g = ctx.createLinearGradient(nx, 0, nx + k * (run.lights ? 40 : 12), 0);
+    g.addColorStop(0, 'rgba(4,6,20,0)');
+    g.addColorStop(1, `rgba(4,6,20,${a})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(nx, 0, this.w - nx, this.h);
+  }
 
   reg(wx) { return this.route ? regionOf(this.route, wx) : 'urban'; }
 
@@ -695,7 +710,7 @@ export class World {
     const { ctx, k } = this;
     const y = this.railY;
     for (const st of this.route.stations) {
-      const a = this.X(st.x - PLATFORM);
+      const a = this.X(st.x - st.plat);
       const b = this.X(st.x + 8);
       if (b < -50 || a > this.w + 50) continue;
       const stopIdx = run.m.stops.findIndex((s) => s.k === st.k);
@@ -718,7 +733,7 @@ export class World {
         }
         // abri vitré derrière la voie
         ctx.fillStyle = 'rgba(160,190,220,0.35)';
-        for (let wx = st.x - PLATFORM + 30; wx < st.x - 20; wx += 55) {
+        for (let wx = st.x - st.plat + 30; wx < st.x - 20; wx += 55) {
           const x = this.X(wx);
           ctx.fillRect(x, y - k * 3.6, k * 9, k * 2.6);
           ctx.fillStyle = '#4b535e';
@@ -727,7 +742,7 @@ export class World {
         }
         // réverbères allumés la nuit
         if (this.light < 0.45) {
-          for (let wx = st.x - PLATFORM + 10; wx < st.x; wx += 30) {
+          for (let wx = st.x - st.plat + 10; wx < st.x; wx += 30) {
             const x = this.X(wx);
             const lg = ctx.createRadialGradient(x, y - k * 4.6, 0, x, y - k * 4.6, k * 6);
             lg.addColorStop(0, 'rgba(255,220,150,0.4)');
@@ -748,7 +763,7 @@ export class World {
       ctx.fillRect(a, top + k * 0.32, b - a, Math.max(2, k * 0.12));
       ctx.fillStyle = '#6c7177';
       ctx.fillRect(a, top + k * 1.4, b - a, k * 0.25);
-      for (const wx of [st.x - PLATFORM + 14, st.x - PLATFORM * 0.5]) this.stationSign(this.X(wx), top - k * 3.1, st.name);
+      for (const wx of [st.x - st.plat + 14, st.x - st.plat * 0.5]) this.stationSign(this.X(wx), top - k * 3.1, st.name);
       const mx = this.X(st.x);
       if (isStop) {
         ctx.fillStyle = '#2b2f36';
@@ -798,11 +813,11 @@ export class World {
     for (let i = 0; i < n; i++) {
       const r1 = hash(i, st.x);
       const r2 = hash(i, st.x + 1);
-      let wx = st.x - 8 - r1 * (PLATFORM - 20);
+      let wx = st.x - 8 - r1 * (st.plat - 20);
       let alpha = 1;
       if (doorsOpen && i < boardedN + 1.5) {
         // marche vers la porte la plus proche puis disparaît
-        const door = nearestDoor(run.x, wx);
+        const door = nearestDoor(run.x, wx, run.m.trainLen / CAR);
         const f = Math.min(1, Math.max(0, boardedN + 1.5 - i) / 1.5);
         wx = lerp(wx, door, f);
         alpha = 1 - Math.max(0, (f - 0.6) / 0.4);
@@ -827,8 +842,8 @@ export class World {
     const rn = run.doors && run.stopI === stopIdx ? run.doors.runner : null;
     if (rn && rn.state === 'running') {
       const f = Math.min(1, (run.t - rn.appearAt) / (rn.arriveAt - rn.appearAt));
-      const door = nearestDoor(run.x, run.x - 60);
-      const wx = lerp(run.x - PLATFORM - 10, door, f);
+      const door = nearestDoor(run.x, run.x - 60, run.m.trainLen / CAR);
+      const wx = lerp(run.x - st.plat - 10, door, f);
       const x = this.X(wx);
       const yb = top + k * 0.9;
       const leg = Math.sin(now / 60) * k * 0.35;
@@ -853,18 +868,21 @@ export class World {
     const y = this.railY;
     const ghost = opts.ghost;
     const L = opts.look ?? this.look('Z2N');
-    if (this.X(nose) < -10 || this.X(nose - CAR * CARS) > this.w + 10) return;
+    const cars = Math.round((run.m.trainLen ?? CAR * CARS) / CAR);
+    if (this.X(nose) < -10 || this.X(nose - CAR * cars) > this.w + 10) return;
     ctx.save();
     if (ghost) ctx.globalAlpha = 0.24;
-    const night = this.light < 0.6 || this.route.tunnels.some((t) => nose > t.from && nose - CAR * CARS < t.to);
+    const night = this.light < 0.6 || this.route.tunnels.some((t) => nose > t.from && nose - CAR * cars < t.to);
     const doorsF = !ghost && run.doors && run.phase !== 'run' ? doorFraction(run) : 0;
     const bodyTop = y - k * (L.deck === 2 ? 4.35 : 3.9);
     const bodyBot = y - k * 0.95;
-    for (let c = 0; c < CARS; c++) {
-      const x1 = this.X(nose - c * CAR);
+    for (let c = 0; c < cars; c++) {
+      // en UM, la deuxième rame est attelée derrière : sa cabine avant touche l'arrière de la première
+      const x1 = this.X(nose - c * CAR) - (c > 0 && c % CARS === 0 ? k * 0.5 : 0);
       const x0 = this.X(nose - (c + 1) * CAR) + k * 0.6;
       if (x1 < -5 || x0 > this.w + 5) continue;
-      const front = c === 0;
+      const front = c % CARS === 0;
+      const lead = c === 0;
       // caisse et nez
       ctx.fillStyle = L.body;
       ctx.beginPath();
@@ -956,7 +974,7 @@ export class World {
         }
       }
       // pantographe
-      if (c === 1) {
+      if (c % CARS === 1) {
         const px = this.X(nose - c * CAR - 13);
         ctx.strokeStyle = '#2f343b';
         ctx.lineWidth = Math.max(1.5, k * 0.12);
@@ -991,17 +1009,25 @@ export class World {
         ctx.fillStyle = '#ffd200';
         ctx.fillRect(x1 - k * 0.5, bodyBot - k * 1.1, k * 0.5, k * 0.6);
         const hl = { x: x1 - k * 0.15, y: bodyBot - k * 1.5 };
-        ctx.fillStyle = '#fffbe6';
+        ctx.fillStyle = lead ? '#fffbe6' : '#8a1c1c';
         ctx.beginPath(); ctx.arc(hl.x, hl.y, k * 0.18, 0, Math.PI * 2); ctx.fill();
-        const reach = k * (night ? 12 : 4);
-        const g = ctx.createRadialGradient(hl.x, hl.y, 0, hl.x, hl.y, reach);
-        g.addColorStop(0, `rgba(255,244,200,${night ? 0.55 : 0.35})`);
-        g.addColorStop(1, 'rgba(255,244,200,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(hl.x, hl.y);
-        ctx.arc(hl.x, hl.y, reach, -0.35, 0.35);
-        ctx.fill();
+        if (lead) {
+          // feux : code (court) ou pleins phares (long faisceau)
+          const full = !ghost && run.lights;
+          const reach = k * (full ? (night ? 34 : 16) : night ? 10 : 4);
+          const g = ctx.createRadialGradient(hl.x, hl.y, 0, hl.x, hl.y, reach);
+          g.addColorStop(0, `rgba(255,244,200,${full ? 0.7 : night ? 0.5 : 0.3})`);
+          g.addColorStop(1, 'rgba(255,244,200,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(hl.x, hl.y);
+          ctx.arc(hl.x, hl.y, reach, full ? -0.22 : -0.35, full ? 0.3 : 0.35);
+          ctx.fill();
+          if (full) {
+            ctx.fillStyle = 'rgba(255,255,240,0.95)';
+            ctx.beginPath(); ctx.arc(hl.x, hl.y, k * 0.32, 0, Math.PI * 2); ctx.fill();
+          }
+        }
       }
     }
     ctx.restore();
@@ -1123,10 +1149,10 @@ export class World {
   }
 }
 
-function nearestDoor(nose, wx) {
+function nearestDoor(nose, wx, cars = CARS) {
   let best = nose - 6.5;
   let bd = Infinity;
-  for (let c = 0; c < CARS; c++) {
+  for (let c = 0; c < cars; c++) {
     for (const off of [6.5, 19.5]) {
       const d = nose - c * CAR - off;
       if (Math.abs(d - wx) < bd) { bd = Math.abs(d - wx); best = d; }

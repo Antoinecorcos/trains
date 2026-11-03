@@ -18,10 +18,10 @@ function play(id, sloppy = 0, sab = null) {
     const i = aiInput(r);
     i.lever = Math.round((i.lever + (sloppy && r.step % 97 === 0 ? sloppy : 0)) * 100) / 100;
     i.lever = Math.max(-1, Math.min(1, i.lever));
-    i.horn = !!i.horn; i.close = !!i.close;
+    i.horn = !!i.horn; i.door = !!i.door; i.lights = !!i.lights;
     record(log, i); step(r, i); r.events.length = 0;
   }
-  return { log: { n: log.n, l: log.l, h: log.h, c: log.c }, score: r.result.score };
+  return { log: { n: log.n, l: log.l, h: log.h, c: log.c, f: log.f }, score: r.result.score };
 }
 
 const stamp = Date.now() % 100000;
