@@ -142,11 +142,16 @@ export async function equipCosmetics(env, user, b) {
 // ---------------------------------------------------------------------------
 
 async function stripe(env, path, form) {
-  const r = await fetch(`https://api.stripe.com/v1/${path}`, {
-    method: form ? 'POST' : 'GET',
-    headers: { authorization: `Bearer ${env.STRIPE_SECRET}`, ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}) },
-    body: form ? new URLSearchParams(form).toString() : undefined,
-  });
+  let r;
+  try {
+    r = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: form ? 'POST' : 'GET',
+      headers: { authorization: `Bearer ${env.STRIPE_SECRET}`, ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}) },
+      body: form ? new URLSearchParams(form).toString() : undefined,
+    });
+  } catch {
+    throw err(502, 'Stripe injoignable pour l\'instant, réessaie dans un instant.');
+  }
   const data = await r.json();
   if (!r.ok) throw err(502, `Paiement indisponible : ${data.error?.message ?? r.status}`);
   return data;

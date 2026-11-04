@@ -217,7 +217,32 @@ async function onHomeClick(e) {
       showHome('classement');
     } catch (err) { C.toast(err.message); }
   } else if (a === 'bulletin') openBulletin();
-  else if (a === 'zoom-in') netmap?.zoom(1.35);
+  else if (a === 'invite') {
+    const how = await invite(api.user?.pseudo);
+    if (how === 'copied') C.toast('Invitation copiée : colle-la dans le groupe');
+  } else if (a === 'share-trophy') {
+    const cur = state.week?.current;
+    if (!cur) return;
+    const reg = t.dataset.kind === 'reg';
+    const cv = reg
+      ? trophyCard({ kind: 'reg', pseudo: cur.regulateur.pseudo, line1: `${fr0.format(cur.regulateur.score)} pts sur le défi hebdo`, line2: `${LINES[cur.line].name} · couronne de régulateur 🎖️` })
+      : trophyCard({ kind: 'udor', pseudo: cur.udor.pseudo, line1: `${cur.udor.pct} % du score possible`, line2: `sur « ${cur.udor.mission} »` });
+    const how = await shareCanvas(cv, reg ? 'ukipu-regulateur' : 'ukipu-u-dor', reg ? `🎖️ ${cur.regulateur.pseudo}, régulateur de la semaine sur Ukipu` : `🏆 U d'Or de la semaine : ${cur.udor.pseudo}`);
+    if (how === 'downloaded') C.toast('Image enregistrée : à glisser dans le groupe');
+  } else if (a === 'season-claim') claimSeason();
+  else if (a === 'pass-buy') buyPass(null);
+  else if (a === 'pass-gift') openGift();
+  else if (a === 'pass-gift-go') buyPass(t.dataset.pseudo);
+  else if (a === 'equip-horn' || a === 'equip-fx' || a === 'equip-emote') {
+    const k = a.slice(6);
+    try {
+      setSeason(await api.cosmetics({ [k]: t.dataset.id || null }));
+      if (k === 'horn') { C.audio.start(); C.audio.hornPreview(t.dataset.id ? THEMES[Number(t.dataset.id.split(':')[1])].horn : null); }
+      showHome('saison');
+    } catch (err) { C.toast(err.message); }
+  } else if (a === 'rame-name') {
+    try { setSeason(await api.cosmetics({ rameName: $('rame-name').value })); C.toast('Ta rame a un nom'); showHome('saison'); } catch (err) { C.toast(err.message); }
+  } else if (a === 'zoom-in') netmap?.zoom(1.35);
   else if (a === 'zoom-out') netmap?.zoom(1 / 1.35);
   else if (a === 'zoom-fit') netmap?.fit();
 }
