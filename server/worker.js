@@ -6,7 +6,7 @@ import { missionById, dailyKey, weekKey, MISSIONS, LINES, RAMES, LIVREES } from 
 import { withSabotage, SABOTAGES, ROLES } from '../public/js/drive/reseau.js';
 import { computeSchedule, replay } from '../public/js/drive/sim.js';
 import {
-  ECONOMY_SCHEMA, MIGRATIONS, ensureWallet, profile, ownedRame, ownsLivree, addBox, addTickets, openBox, buyBox, upgradeRame, equip, claimDaily, runReward,
+  ECONOMY_SCHEMA, MIGRATIONS, ensureWallet, profile, touch, ownedRame, ownsLivree, addBox, addTickets, openBox, buyBox, upgradeRame, equip, claimDaily, runReward,
 } from './economy.js';
 import {
   NETWORK_SCHEMA, NETWORK_MIGRATIONS, network, collect, renovate, assignStaff, sabotage, pendingSabotage, runTicketsFx, weekly, bulletin, openLines,
@@ -107,7 +107,12 @@ async function route(req, env, url) {
   if (p === '/api/feed' && m === 'GET') return feed(env);
   if (p === '/api/ranking' && m === 'GET') return ranking(env);
   if (p === '/api/lines' && m === 'GET') return lineCrowns(env);
-  if (p === '/api/profile' && m === 'GET') { const u = await auth(req, env); return json(await profile(env, u.id)); }
+  if (p === '/api/profile' && m === 'GET') {
+    const u = await auth(req, env);
+    const back = await touch(env, u.id);
+    if (back) await addEvent(env, 'join', `🚆 ${u.pseudo} reprend du service après ${back.days} jours d'absence. Gare à vos couronnes.`);
+    return json({ ...(await profile(env, u.id)), welcomeBack: back });
+  }
   if (p === '/api/equip' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await equip(env, u.id, b.rame, b.livree); return json(await profile(env, u.id)); }
   if (p === '/api/box/open' && m === 'POST') { const u = await auth(req, env); const b = await body(req); const items = await openBox(env, u.id, String(b.kind)); await boxEvent(env, u, items); return json({ items, profile: await profile(env, u.id) }); }
   if (p === '/api/box/buy' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await buyBox(env, u.id, String(b.kind)); return json(await profile(env, u.id)); }

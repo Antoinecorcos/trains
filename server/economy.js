@@ -37,6 +37,7 @@ export const ECONOMY_SCHEMA = [
 
 // Colonnes ajoutées après coup (bases déjà créées) : on les ajoute si elles manquent
 export const MIGRATIONS = [
+  'ALTER TABLE wallet ADD COLUMN last_seen INTEGER NOT NULL DEFAULT 0',
   "ALTER TABLE best ADD COLUMN rame TEXT NOT NULL DEFAULT 'Z2N'",
   "ALTER TABLE best ADD COLUMN livree TEXT NOT NULL DEFAULT 'origine'",
 ];
@@ -219,4 +220,18 @@ export async function claimDaily(env, userId, today, yesterday) {
 // Récompense d'une partie
 export function runReward(res) {
   return Math.floor(Math.max(0, res.score) / 60) + 15 * res.stars;
+}
+
+// Bonus de retour : après 3 jours d'absence, un colis rare et des tickets pour revenir dans la course
+export const COMEBACK = { days: 3, tickets: 250, box: 'rare' };
+export async function touch(env, userId, now = Date.now()) {
+  await ensureWallet(env, userId);
+  const w = await env.DB.prepare('SELECT last_seen FROM wallet WHERE user_id = ?').bind(userId).first();
+  const away = w.last_seen ? now - w.last_seen : 0;
+  if (away < 10 * 60000 && w.last_seen) return null;
+  await env.DB.prepare('UPDATE wallet SET last_seen = ? WHERE user_id = ?').bind(now, userId).run();
+  if (!w.last_seen || away < COMEBACK.days * 86400000) return null;
+  await addTickets(env, userId, COMEBACK.tickets);
+  await addBox(env, userId, COMEBACK.box);
+  return { days: Math.floor(away / 86400000), tickets: COMEBACK.tickets, box: COMEBACK.box };
 }

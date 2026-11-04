@@ -1,13 +1,14 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
 import { MISSIONS, dailyMission, weeklyMission, lineOf, buildRoute } from './route.js';
 import { SABOTAGES } from './reseau.js';
+import { runCard, shareCanvas } from './share.js';
 import {
   DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { api } from './api.js';
-import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage } from './home.js';
+import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage, openAccountModal } from './home.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -118,6 +119,7 @@ function renderAccount() {
       await refreshProfile();
       toast(mode === 'register' ? `Bienvenue ${api.user.pseudo} ! Un colis t'attend au dépôt.` : `Bon retour ${api.user.pseudo}`);
       showHome('reseau');
+      setTimeout(flushPending, 1500);
     } catch (e) {
       $('acc-err').textContent = e.message;
     }
@@ -705,6 +707,7 @@ function bindButtons() {
     const nx = nextMission();
     if (nx) showBrief(nx); else showHome('departs');
   });
+  $('btn-share-img').addEventListener('click', () => shareResult());
   $('btn-copy').addEventListener('click', copyResult);
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
 }
@@ -754,19 +757,63 @@ function showEnd() {
       ${line('Pénalités', fr0.format(Math.round(res.parts.penalty)))}
       ${line('Comparaison', vsPrev)}
     </div>
-    <div class="tk-online" id="tk-online">${api.loggedIn ? 'Envoi au classement…' : api.online ? 'Connecte-toi pour entrer au classement.' : 'Hors ligne : partie gardée sur cet appareil.'}</div>
+    <div class="tk-online" id="tk-online">${api.loggedIn ? 'Envoi au classement…' : api.online ? 'Crée ton compte (ou connecte-toi) : ce service sera envoyé au classement.<button class="pill pill-good tk-open" type="button" id="tk-account">Créer mon compte</button>' : 'Hors ligne : partie gardée sur cet appareil, elle partira au classement plus tard.'}</div>
     <div class="tk-feed"><b>${esc(pseudo)}</b> a conduit « ${mission.title} » : ${fr0.format(res.score)} pts.</div>
     <div class="stamp">Composté<span class="stars">${'★'.repeat(res.stars)}${'☆'.repeat(3 - res.stars)}</span>${today}</div>`;
   $('copy-fallback').hidden = true;
   $('btn-next').disabled = !nextMission();
   $('screen-end').hidden = false;
-  if (api.loggedIn) sendRun(mission, runLog, runGear);
+  const item = keepPending(mission, runLog, runGear);
+  if (api.loggedIn) sendRun(mission, item);
+  else if ($('tk-account')) $('tk-account').onclick = () => { $('screen-end').hidden = true; showHome('reseau'); openAccountModal(); };
 }
 
-async function sendRun(m, log, g) {
+// ---------------------------------------------------------------------------
+// Parties en attente : gardées sur l'appareil jusqu'à ce que le serveur les ait reçues
+// (réseau coupé dans un tunnel, compte pas encore créé, serveur indisponible…)
+// ---------------------------------------------------------------------------
+
+const PENDING = 'ukipu.pending';
+const pendingList = () => (store.get(PENDING, []) || []).filter((p) => Date.now() - p.at < 2 * 86400000);
+function keepPending(m, log, g) {
+  const item = { id: `${m.id}-${Date.now()}`, mission: m.id, at: Date.now(), log: { n: log.n, l: log.l, h: log.h, c: log.c, f: log.f }, gear: { rame: { id: g.rame.id }, livree: g.livree } };
+  store.set(PENDING, [...pendingList(), item].slice(-5));
+  return item;
+}
+const dropPending = (id) => store.set(PENDING, pendingList().filter((p) => p.id !== id));
+
+// Renvoie les parties en attente (au démarrage, après connexion)
+export async function flushPending() {
+  if (!api.loggedIn) return;
+  let sent = 0;
+  let best = null;
+  for (const p of pendingList()) {
+    try {
+      const r = await api.submitRun(p.mission, p.log, p.gear);
+      dropPending(p.id);
+      sent++;
+      if (r.crown) best = r;
+    } catch (e) {
+      if (e.status >= 400 && e.status < 500 && e.status !== 401) dropPending(p.id); // refusée pour de bon
+    }
+  }
+  if (sent) {
+    toast(`${sent} service${sent > 1 ? 's' : ''} en attente envoyé${sent > 1 ? 's' : ''} au classement${best ? ' · 👑 en tête !' : ''}`);
+    await api.refresh();
+    syncProgress();
+    refreshProfile();
+  }
+}
+
+let lastServer = null; // réponse du serveur pour le dernier service (pour la carte image)
+
+async function sendRun(m, item) {
   const el = $('tk-online');
+  lastServer = null;
   try {
-    const r = await api.submitRun(m.id, { n: log.n, l: log.l, h: log.h, c: log.c, f: log.f }, g);
+    const r = await api.submitRun(m.id, item.log, item.gear);
+    lastServer = r;
+    dropPending(item.id);
     let html;
     if (r.crown && r.dethroned) html = `👑 <b>Tu prends la tête</b> et tu détrônes <b>${esc(r.dethroned)}</b> !`;
     else if (r.crown) html = r.players > 1 ? '👑 <b>Tu gardes la tête</b> du classement.' : '👑 <b>Premier au classement</b> de cette mission.';
@@ -791,9 +838,27 @@ async function sendRun(m, log, g) {
     refreshProfile();
     if (r.crown) { audio.perfect(); }
   } catch (e) {
-    el.textContent = `Envoi impossible : ${e.message}`;
+    if (e.status >= 400 && e.status < 500 && e.status !== 401) dropPending(item.id);
+    el.textContent = e.status === 0 || e.status >= 500 ? `Envoi impossible pour l'instant (${e.message}). Le service est gardé et repartira tout seul.` : `Envoi impossible : ${e.message}`;
     el.classList.add('err');
   }
+}
+
+async function shareResult() {
+  const res = run.result;
+  const l = lineOf(mission);
+  const r = lastServer;
+  const headline = r?.crown && r.dethroned ? `👑 Prend la tête et détrône ${r.dethroned}`
+    : r?.crown ? '👑 En tête du classement'
+      : r ? `${r.rank}e sur ${r.players}${r.best ? ' · record perso' : ''}` : (res.stars === 3 ? 'Trois étoiles' : '');
+  const pseudo = api.user?.pseudo ?? (store.get('ukipu.pseudo', '') || 'Conducteur');
+  const cv = runCard({
+    line: l.id, title: mission.title, route: `${l.stations[mission.from].name} → ${l.stations[mission.to].name}`,
+    score: fr0.format(r?.score ?? res.score), stars: r?.stars ?? res.stars, grades: res.grades.map((g) => g.grade),
+    headline, pseudo, date: new Date().toLocaleDateString('fr-FR'),
+  });
+  const how = await shareCanvas(cv, `ukipu-${mission.id}`, `${pseudo} sur « ${mission.title} » : ${fr0.format(res.score)} pts. Fais mieux : ${location.origin}`);
+  if (how === 'downloaded') toast('Image enregistrée : à glisser dans le groupe');
 }
 
 async function copyResult() {
@@ -835,6 +900,7 @@ function boot() {
     syncProgress();
     await refreshProfile();
     if (!$('screen-start').hidden) showHome();
+    flushPending();
   });
 }
 

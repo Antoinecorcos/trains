@@ -8,6 +8,7 @@ import {
 } from './reseau.js';
 import { api } from './api.js';
 import { mountNetMap } from './netmap.js';
+import { trophyCard, bulletinCard, shareCanvas, invite } from './share.js';
 
 let netmap = null;
 
@@ -48,6 +49,11 @@ export async function refreshProfile() {
     const [p, n] = await Promise.all([api.profile(), api.network()]);
     state.profile = p;
     setNetwork(n);
+    if (p.welcomeBack) {
+      const b = p.welcomeBack;
+      C.audio.perfect();
+      C.toast(`Bon retour ! ${b.days} jours d'absence : +${b.tickets} 🎟 et un ${BOX_SHOP[b.box].name.toLowerCase()} au dépôt.`);
+    }
   } catch { /* garde le précédent */ }
   renderWallet();
 }
@@ -262,11 +268,52 @@ function renderReseau(body) {
       el.classList.add('scroll');
       el.style.animationDuration = `${Math.max(14, el.textContent.length / 6)}s`;
     }).catch(() => {});
-    if (!api.loggedIn && !state.askedLogin) { state.askedLogin = true; openAccountModal(); }
+    if (!api.loggedIn && !state.askedLogin && !showIntroIfNew()) { state.askedLogin = true; openAccountModal(); }
   }
 }
 
-function openAccountModal() {
+// Accueil des nouveaux : trois écrans, puis directement le premier service (le compte viendra après)
+const INTRO = [
+  { ico: '<span class="pict pict-xl" style="background:#C4245F;color:#fff">U</span>', title: 'Tu hérites de la ligne U', text: 'La ligne la plus pourrie d\'Île-de-France. À toi de la conduire gare après gare : arrêt pile au repère, portes, phares et horaire à tenir.' },
+  { ico: '<span class="intro-picts">' + ['L', 'N', 'C', 'A'].map((id) => `<span class="pict pict-lg" style="background:${LINES[id].color};color:${LINES[id].ink}">${id}</span>`).join('') + '</span>', title: 'Étends ton réseau', text: 'Tes étoiles débloquent la L, la N, le RER C et le RER A par les correspondances. Rénove tes gares, récolte tes caisses, recrute du personnel… et ouvre des colis.' },
+  { ico: '<span class="intro-big">👑</span>', title: 'Écrase tes potes', text: 'Une couronne par ligne, leurs fantômes sur ta voie, un sabotage par jour, la U d\'Or de la honte et le bulletin du lundi à poster dans le groupe.' },
+];
+
+export function showIntroIfNew() {
+  if (api.loggedIn || C.store.get('ukipu.intro', false)) return false;
+  state.askedLogin = true;
+  let i = 0;
+  const el = document.createElement('div');
+  el.className = 'intro';
+  document.body.appendChild(el);
+  const done = (play) => {
+    C.store.set('ukipu.intro', true);
+    el.remove();
+    if (play) showBrief(MISSIONS[0]);
+    else openAccountModal();
+  };
+  const render = () => {
+    const sl = INTRO[i];
+    el.innerHTML = `<div class="intro-card">
+      <div class="intro-ico">${sl.ico}</div>
+      <h1>${sl.title}</h1><p>${sl.text}</p>
+      <div class="intro-dots">${INTRO.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
+      <button class="big-btn" type="button" data-intro="next">${i < INTRO.length - 1 ? 'Suivant' : 'Prendre mon premier service'}</button>
+      <button class="ghost-btn small" type="button" data-intro="login">J'ai déjà un compte</button>
+    </div>`;
+  };
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-intro]');
+    if (!b) return;
+    if (b.dataset.intro === 'login') done(false);
+    else if (i < INTRO.length - 1) { i++; render(); C.audio.click(); }
+    else done(true);
+  });
+  render();
+  return true;
+}
+
+export function openAccountModal() {
   const m = $('mh-modal');
   if (!m) return;
   m.hidden = false;
@@ -593,6 +640,7 @@ async function renderClassement(body) {
       api.loggedIn ? api.targets().catch(() => null) : null,
     ]);
     state.crowns = lines;
+    state.week = wk;
     state.targets = tg?.players ?? [];
     const token = api.loggedIn && state.network?.sabotageToken;
     const crowns = Object.values(LINES).map((l) => {
@@ -612,15 +660,15 @@ async function renderClassement(body) {
       <section class="board week">
         <div class="board-head"><div><h1 class="board-title">Cette semaine</h1><p class="board-sub">Remis en jeu chaque lundi · ${pict(cur.line, 'pict-xs')} défi hebdo</p></div>
           <button class="pill pill-led" type="button" data-act="bulletin">📰 Bulletin du lundi</button></div>
-        <div class="row rk-row week-row"><span class="wk-ico">🎖️</span><span class="row-mid"><span class="row-type">Couronne de régulateur · défi hebdo à armes égales</span><span class="row-dest">${cur.regulateur ? `${esc(cur.regulateur.pseudo)} · ${fr0.format(cur.regulateur.score)} pts` : '<span class="muted">Personne encore : fonce !</span>'}</span>${prev?.regulateur ? `<span class="row-via">La semaine dernière : ${esc(prev.regulateur.pseudo)}</span>` : ''}</span><button class="pill pill-ok" type="button" data-act="mission" data-id="${cur.mission}">Jouer</button></div>
-        <div class="row rk-row week-row udor"><span class="wk-ico">🏆</span><span class="row-mid"><span class="row-type">U d'Or · pire service de la semaine</span><span class="row-dest">${cur.udor ? `${esc(cur.udor.pseudo)} · ${cur.udor.pct} % sur « ${esc(cur.udor.mission)} »` : '<span class="muted">Pas encore de candidat…</span>'}</span>${prev?.udor ? `<span class="row-via">Tenant du titre : ${esc(prev.udor.pseudo)}</span>` : ''}</span></div>
+        <div class="row rk-row week-row"><span class="wk-ico">🎖️</span><span class="row-mid"><span class="row-type">Couronne de régulateur · défi hebdo à armes égales</span><span class="row-dest">${cur.regulateur ? `${esc(cur.regulateur.pseudo)} · ${fr0.format(cur.regulateur.score)} pts` : '<span class="muted">Personne encore : fonce !</span>'}</span>${prev?.regulateur ? `<span class="row-via">La semaine dernière : ${esc(prev.regulateur.pseudo)}</span>` : ''}</span><span class="wk-btns">${cur.regulateur ? '<button class="pill pill-off" type="button" data-act="share-trophy" data-kind="reg" aria-label="Partager">📸</button>' : ''}<button class="pill pill-ok" type="button" data-act="mission" data-id="${cur.mission}">Jouer</button></span></div>
+        <div class="row rk-row week-row udor"><span class="wk-ico">🏆</span><span class="row-mid"><span class="row-type">U d'Or · pire service de la semaine</span><span class="row-dest">${cur.udor ? `${esc(cur.udor.pseudo)} · ${cur.udor.pct} % sur « ${esc(cur.udor.mission)} »` : '<span class="muted">Pas encore de candidat…</span>'}</span>${prev?.udor ? `<span class="row-via">Tenant du titre : ${esc(prev.udor.pseudo)}</span>` : ''}</span>${cur.udor ? '<button class="pill pill-off" type="button" data-act="share-trophy" data-kind="udor" aria-label="Partager">📸</button>' : ''}</div>
         ${api.loggedIn ? `<p class="wk-sabo">${token ? '😈 Ton jeton de sabotage du jour est prêt : touche 😈 à côté d\'un pote.' : '😈 Jeton de sabotage utilisé. Nouveau jeton demain.'}</p>` : ''}
       </section>` : '';
     body.innerHTML = `
       ${week}
       <section class="panel" id="feed" hidden></section>
       <section class="board"><div class="board-head"><div><h1 class="board-title">Couronnes</h1><p class="board-sub">👑 Couronne d'exploitant : meilleur cumul de records par ligne, avec sa collection</p></div></div>${crowns}</section>
-      <section class="board"><div class="board-head"><div><h1 class="board-title">Conducteurs</h1><p class="board-sub">Étoiles, puis points</p></div></div>${list}</section>`;
+      <section class="board"><div class="board-head"><div><h1 class="board-title">Conducteurs</h1><p class="board-sub">Étoiles, puis points</p></div><button class="pill pill-led" type="button" data-act="invite">➕ Inviter des potes</button></div>${list}</section>`;
     C.renderFeed();
   } catch (err) {
     body.innerHTML = `<section class="panel"><p class="muted pad">${esc(err.message)}</p></section>`;
@@ -677,7 +725,13 @@ async function openBulletin() {
   ].filter(Boolean);
   const text = lines.join('\n');
   const el = modal(`<div class="bulletin"><div class="bl-head"><span class="ticker-tag">Info trafic</span><b>Bulletin du lundi</b></div>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>
-    <button class="big-btn" type="button" id="bl-copy">Copier pour le groupe</button>`);
+    <button class="big-btn" type="button" id="bl-img">📸 Partager l'image</button>
+    <button class="ghost-btn" type="button" id="bl-copy">Copier en texte</button>`);
+  el.querySelector('#bl-img').onclick = async (e) => {
+    e.stopPropagation();
+    const how = await shareCanvas(bulletinCard(lines), 'ukipu-bulletin', lines[0]);
+    if (how === 'downloaded') C.toast('Image enregistrée : à glisser dans le groupe');
+  };
   el.querySelector('#bl-copy').onclick = async (e) => {
     e.stopPropagation();
     try { await navigator.clipboard.writeText(text); C.toast('Bulletin copié, à coller dans le groupe'); } catch { C.toast('Copie impossible sur cet appareil'); }

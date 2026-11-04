@@ -37,7 +37,7 @@ export function createRun(mission, opts = {}) {
     animals: m.animals.map((a) => ({ ...a, state: 'track', waited: 0, fleeT: 0 })),
     works: m.works.map((w) => ({ ...w, warned: false, missed: false })),
     passed: new Set(),
-    flew: new Set(),
+    passI: 0, // prochaine gare traversée sans arrêt (triées dans le sens de marche)
     doors: null,
     waitDoors: null, // instant où le train s'est immobilisé au repère, portes encore fermées
     reversedD: null,
@@ -213,7 +213,9 @@ function drive(r, hornEdge, input = {}) {
   r.x += r.v * DT;
 
   // Phares : pleins phares dans le noir, code à l'approche des quais
-  if (r.v > 3 && darkAt(r, r.x) && !nearPlatform(r) && !r.lights) {
+  const dark = darkAt(r, r.x);
+  const near = nearPlatform(r);
+  if (r.v > 3 && dark && !near && !r.lights) {
     r.darkT += DT;
     if (r.darkT > 2.5) {
       r.stats.darkT += DT;
@@ -223,9 +225,9 @@ function drive(r, hornEdge, input = {}) {
     }
   } else {
     r.darkT = 0;
-    if (r.lightsWarn && (r.lights || !darkAt(r, r.x))) { r.lightsWarn = false; emit(r, { type: 'lightsOk' }); }
+    if (r.lightsWarn && (r.lights || !dark)) { r.lightsWarn = false; emit(r, { type: 'lightsOk' }); }
   }
-  if (r.lights && nearPlatform(r) && r.v > 1 && !r.dazzled.has(r.stopI)) {
+  if (r.lights && near && r.v > 1 && !r.dazzled.has(r.stopI)) {
     const s0 = nextStop(r);
     if (s0.x - r.x < s0.plat) {
       r.dazzled.add(r.stopI);
@@ -283,11 +285,10 @@ function drive(r, hornEdge, input = {}) {
   }
 
   // Gares traversées sans arrêt : bonus si on les passe à pleine vitesse
-  for (const p of r.m.passes) {
-    if (!r.flew.has(p.k) && prevX < p.x && r.x >= p.x) {
-      r.flew.add(p.k);
-      if (r.v >= 100 / 3.6) add(r, 'bonus', 40, { type: 'pass', label: `${p.name} en trombe`, kmh: Math.round(r.v * 3.6) });
-    }
+  const ps = r.m.passes;
+  while (r.passI < ps.length && ps[r.passI].x <= r.x) {
+    const p = ps[r.passI++];
+    if (prevX < p.x && r.v >= 100 / 3.6) add(r, 'bonus', 40, { type: 'pass', label: `${p.name} en trombe`, kmh: Math.round(r.v * 3.6) });
   }
 
   // Arrêts non prévus (semi-direct)
@@ -545,14 +546,24 @@ export function record(log, input) {
 
 export function replay(mission, sched, log, rame) {
   const r = createRun(mission, { sched, rame });
-  const horn = new Set(log.h);
-  const door = new Set(log.c);
-  const lights = new Set(log.f ?? []);
+  // les journaux sont triés par pas de temps : on avance des curseurs au lieu de chercher à chaque pas
+  const h = log.h;
+  const c = log.c;
+  const f = log.f ?? [];
   let li = 0;
-  let lever = 0;
+  let hi = 0;
+  let ci = 0;
+  let fi = 0;
+  const input = { lever: 0, horn: false, door: false, lights: false };
   for (let i = 0; i < log.n && !r.over; i++) {
-    while (li < log.l.length && log.l[li][0] === i) { lever = log.l[li][1]; li++; }
-    step(r, { lever, horn: horn.has(i), door: door.has(i), lights: lights.has(i) });
+    while (li < log.l.length && log.l[li][0] === i) { input.lever = log.l[li][1]; li++; }
+    while (hi < h.length && h[hi] < i) hi++;
+    while (ci < c.length && c[ci] < i) ci++;
+    while (fi < f.length && f[fi] < i) fi++;
+    input.horn = h[hi] === i;
+    input.door = c[ci] === i;
+    input.lights = f[fi] === i;
+    step(r, input);
     r.events.length = 0;
   }
   return r;

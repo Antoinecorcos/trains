@@ -8,6 +8,14 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.3 — prêt pour le lancement
+
+- **Intro des nouveaux** : trois écrans puis directement le premier service, sans compte. Le score part au classement dès la création du compte.
+- **Parties en attente** : un service qui n'a pas pu être envoyé (tunnel, réseau, serveur) est gardé sur l'appareil et renvoyé tout seul.
+- **Cartes image à partager** : fin de service, U d'Or, régulateur de la semaine, bulletin du lundi (partage natif sur téléphone, téléchargement sur PC). Bouton **Inviter des potes**.
+- **Bonus de retour** : après 3 jours d'absence, un colis rare et 250 tickets (annoncé dans le fil d'actu).
+- Vérification serveur plus rapide. Check-list de mise en ligne : [`docs/LANCEMENT.md`](docs/LANCEMENT.md).
+
 ## V2.2 — le direct
 
 - **Le direct de Rambouillet** (ligne N) : Montparnasse → Versailles-Chantiers → Rambouillet, 160 km/h autorisés, les petites gares traversées en trombe (+40 chacune au-dessus de 100 km/h).

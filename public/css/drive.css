@@ -642,3 +642,18 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 .bl-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: var(--f-ui); }
 .bl-head b { color: #fff; text-shadow: none; }
 .board.week .board-title { font-size: 26px; }
+
+/* ---------- Accueil des nouveaux ---------- */
+.intro { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: radial-gradient(circle at 50% 30%, #2337b4, #070c33 75%); }
+.intro-card { width: min(440px, 100%); display: grid; gap: 14px; justify-items: center; text-align: center; animation: rise 0.25s ease-out; }
+.intro-card h1 { margin: 0; font-size: 28px; font-weight: 900; line-height: 1.1; }
+.intro-card p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--soft); font-weight: 600; }
+.intro-ico { min-height: 110px; display: grid; place-items: center; }
+.pict-xl { width: 96px; height: 96px; border-radius: 20px; font-size: 64px; box-shadow: 0 0 40px rgba(196, 36, 95, 0.6); }
+.intro-picts { display: flex; gap: 10px; }
+.intro-big { font-size: 84px; filter: drop-shadow(0 0 24px rgba(255, 210, 0, 0.6)); }
+.intro-dots { display: flex; gap: 8px; }
+.intro-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); }
+.intro-dots i.on { background: var(--yellow); width: 22px; border-radius: 4px; }
+.wk-btns { display: inline-flex; gap: 6px; }
+.share-btn { background: linear-gradient(160deg, #2f6ff2, #1b2c9f); }
