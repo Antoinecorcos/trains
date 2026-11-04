@@ -122,7 +122,18 @@ export function runCard(d) {
   if (d.headline) y = wrap(ctx, d.headline, W / 2, y, W - 160, 50);
   ctx.fillStyle = '#c3cbff';
   ctx.font = `700 32px ${FONT}`;
-  ctx.fillText(`${d.pseudo} · ${d.date}`, W / 2, Math.max(y + 20, H - 130));
+  ctx.fillText(`${d.pseudo}${d.frame ? ' 🎫' : ''} · ${d.date}`, W / 2, Math.max(y + 20, H - 130));
+  if (d.frame) {
+    // cadre doré (Pass Navigo)
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#fff1a8');
+    g.addColorStop(0.5, '#d9a21b');
+    g.addColorStop(1, '#fff1a8');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 22;
+    rr(ctx, 11, 131, W - 22, H - 142, 28);
+    ctx.stroke();
+  }
   return cv;
 }
 

@@ -3,6 +3,7 @@
 // mission dure environ 4 à 6 minutes. Les coordonnées des gares sont approximatives (plan schématique).
 
 import { mulberry32 } from '../rng.js';
+import { SEASON_LIVREES } from './saison.js';
 
 const SCALE = 0.19;
 // Écart minimal entre deux gares (m de jeu) : un quai long + de quoi accélérer et freiner
@@ -197,6 +198,7 @@ export const LIVREES = {
   rose: { name: 'Rose U', rarity: 'epique', body: '#ffe3ef', band: '#c4245f', doors: '#c4245f' },
   inox: { name: 'Inox brossé', rarity: 'legendaire', body: '#c8cdd4', band: '#8a929c', doors: '#9aa1aa' },
   or: { name: 'Or', rarity: 'mythique', body: '#f3d27a', band: '#a7781a', doors: '#7a5310', glow: true },
+  ...SEASON_LIVREES, // une par mois, réservées à la piste Pass de la saison
 };
 
 // Boîtes : contenus tirés par le serveur, prix en tickets
@@ -204,6 +206,11 @@ export const BOX_SHOP = {
   standard: { name: 'Colis du technicentre', price: 300, hint: 'Tickets, pièces, parfois une livrée ou une rame' },
   rare: { name: 'Colis rare', price: 900, hint: 'Bonnes chances de rame rare ou épique' },
   legendaire: { name: 'Colis légendaire', price: 2400, hint: 'Rame épique garantie, chance de légendaire ou mythique' },
+};
+// Tous les colis (le Colis Navigo ne s'achète pas : il se gagne sur la piste Pass de la saison)
+export const BOX_INFO = {
+  ...BOX_SHOP,
+  navigo: { name: 'Colis Navigo', hint: 'Carte légendaire garantie, une livrée, 400 tickets et 30 pièces' },
 };
 
 export const MAX_LEVEL = 5;

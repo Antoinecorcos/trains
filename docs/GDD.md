@@ -28,9 +28,10 @@
 | **Personnel (V2)** | Cartes tirées des colis : agent d'escale (caisse), aiguilleur (caisse et plafond), maintenance (chantiers plus courts), régulateur (tickets des services), sûreté (bonus quand on déjoue un sabotage). Une carte par ligne, niveaux par doublons. **Les cartes légendaires sont les autres joueurs**, avec leur pseudo et un trait. |
 | **Sabotage (V2)** | Un jeton par jour : on envoie un incident (signal capricieux, sanglier, feuilles, travaux, quais bondés) sur le prochain service d'un pote, sur une ligne qu'il exploite. 2 ★ sans percuter ni franchir de signal : il le déjoue et gagne le bonus ; sinon le saboteur l'empoche. Tout part dans le fil d'actu. Jamais sur les défis à armes égales. |
 | **Semaine (V2)** | **Défi hebdo** (plus long, deux aléas par interstation, Z 2N imposée) : son meilleur score prend la **couronne de régulateur** 🎖️. **U d'Or** 🏆 : le pire service de la semaine (score le plus bas par rapport au potentiel). **Bulletin trafic du lundi** à copier dans le groupe. |
+| **Saison et Pass (V2.4)** | Saison mensuelle à 20 paliers (piste gratuite pour tous). **Pass Navigo** à 2,99 € le mois, paiement unique, offrable : piste Pass avec 2 Colis Navigo (carte légendaire garantie), livrée du mois, klaxon, traînée et emote du fantôme, badge, nom de rame, cadre doré, caisses à 8 h et 3 chantiers. Ni rames, ni points, ni avantage sur les défis. Paiement Stripe. |
 | **Confiance** | Le serveur rejoue chaque partie à partir du journal des commandes : impossible d'envoyer un faux score ou de rouler avec une rame qu'on ne possède pas. |
 
-Pas encore fait : monétisation (Pass Navigo, livrées payantes), mode duo, technicentre (usure des
+Pas encore fait : mode duo, technicentre (usure des
 rames), cartes image partageables, bonus de retour des occasionnels, extension métro, poste
 d'aiguillage multi-lignes.
 

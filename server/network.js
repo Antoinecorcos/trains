@@ -2,6 +2,7 @@
 // défi hebdo (couronne de régulateur), U d'Or et Bulletin trafic du lundi.
 
 import { LINES, MISSIONS, RARITIES, weekKey, weeklyMission, dailyKey } from '../public/js/drive/route.js';
+import { PASS_PERKS, seasonKey } from '../public/js/drive/saison.js';
 import {
   openLinesFrom, STATIONS, RENOV, MAX_STATION, CHANTIER_SLOTS, caisseRate, caisseCap,
   STAFF, cardDef, staffPower, staffFx, STAFF_MAX_LEVEL, SABOTAGES,
@@ -95,16 +96,17 @@ function lineFx(staff, lineId, pseudoOf) {
 
 async function context(env, userId, now = Date.now()) {
   await settleStations(env, userId, now);
-  const [open, st, staff] = await Promise.all([
+  const [open, st, staff, pass] = await Promise.all([
     openLines(env, userId),
     env.DB.prepare('SELECT station, level, until FROM stations WHERE user_id = ?').bind(userId).all(),
     staffRows(env, userId),
+    env.DB.prepare('SELECT 1 AS ok FROM passes WHERE user_id = ? AND season = ? LIMIT 1').bind(userId, seasonKey(new Date(now))).first(),
   ]);
   const ids = staff.map((s) => /^p(\d+)$/.exec(s.card)?.[1]).filter(Boolean).map(Number);
   const names = await pseudoMap(env, ids);
   const pseudoOf = (id) => names[id];
   const stations = Object.fromEntries(st.results.map((r) => [r.station, { level: r.level, until: r.until }]));
-  return { open, stations, staff, pseudoOf, levelOf: (name) => stations[name]?.level || 0 };
+  return { open, stations, staff, pseudoOf, levelOf: (name) => stations[name]?.level || 0, pass: !!pass };
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +123,7 @@ export async function network(env, user, now = Date.now()) {
     if (!ctx.open.includes(c.line)) continue;
     const fx = lineFx(ctx.staff, c.line, ctx.pseudoOf);
     const rate = caisseRate(c.line, ctx.levelOf, fx);
-    const cap = caisseCap(rate, fx);
+    const cap = caisseCap(rate, { ...fx, capHours: (fx.capHours ?? 0) + (ctx.pass ? PASS_PERKS.capHours : 0) });
     caisses[c.line] = { rate: Math.round(rate), cap, amount: Math.min(cap, Math.floor(((now - c.since) / HOUR) * rate)), since: c.since };
   }
   const incoming = await env.DB.prepare(`SELECT s.id, s.line, s.kind, s.at, u.pseudo AS by FROM sabotages s JOIN users u ON u.id = s.from_user
@@ -138,6 +140,8 @@ export async function network(env, user, now = Date.now()) {
     }),
     incoming: incoming.results,
     sabotageToken: (w?.last_sabo ?? 0) !== dailyKey(new Date(now)),
+    pass: ctx.pass,
+    slots: CHANTIER_SLOTS + (ctx.pass ? PASS_PERKS.chantiers : 0),
   };
 }
 
@@ -165,7 +169,8 @@ export async function renovate(env, user, station, now = Date.now()) {
   if (cur.until) throw err(400, 'Un chantier est déjà en cours dans cette gare.');
   if (cur.level >= MAX_STATION) throw err(400, 'Cette gare est déjà au niveau maximum.');
   const busy = Object.values(ctx.stations).filter((s) => s.until).length;
-  if (busy >= CHANTIER_SLOTS) throw err(400, `${CHANTIER_SLOTS} chantiers au maximum en même temps.`);
+  const slots = CHANTIER_SLOTS + (ctx.pass ? PASS_PERKS.chantiers : 0);
+  if (busy >= slots) throw err(400, `${slots} chantiers au maximum en même temps${ctx.pass ? '' : ' (3 avec le Pass Navigo)'}.`);
   const step = RENOV[cur.level + 1];
   // l'agent de maintenance le plus efficace parmi les lignes de la gare raccourcit le chantier
   const k = Math.min(1, ...st.lines.map((id) => lineFx(ctx.staff, id, ctx.pseudoOf).chantier ?? 1));

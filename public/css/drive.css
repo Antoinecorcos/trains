@@ -384,7 +384,7 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 .wallet-box { color: var(--yellow); }
 .home-body { overflow-y: auto; padding: 4px 12px 16px; display: grid; grid-auto-rows: max-content; gap: 14px; align-content: start; overscroll-behavior: contain; min-height: 0; }
 .home-body .board { max-width: none; box-shadow: 0 0 0 4px #0a0f2e, 0 18px 40px rgba(0, 0, 0, 0.45); }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--board-deep); box-shadow: 0 -1px 0 var(--rule); }
+.tabs { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--board-deep); box-shadow: 0 -1px 0 var(--rule); }
 .tabs button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 10px; font-size: 12px; font-weight: 800; color: var(--dim); }
 .tabs button.on { color: var(--yellow); }
 .t-ico { font-size: 19px; line-height: 1.1; }
@@ -657,3 +657,46 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 .intro-dots i.on { background: var(--yellow); width: 22px; border-radius: 4px; }
 .wk-btns { display: inline-flex; gap: 6px; }
 .share-btn { background: linear-gradient(160deg, #2f6ff2, #1b2c9f); }
+
+/* ---------- Saison et Pass Navigo ---------- */
+.board.season { box-shadow: 0 0 0 2px #9b6cff, 0 10px 40px rgba(0, 0, 0, 0.35); }
+.season-tier { font-size: 18px; font-weight: 800; color: var(--soft); }
+.season-tier b { font-size: 34px; color: var(--white); }
+.season-bar { position: relative; margin: 0 16px 14px; height: 26px; border-radius: 13px; background: var(--board-deep); overflow: hidden; }
+.season-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #7a3fd0, #ff4fa1); border-radius: 13px; }
+.season-bar span { position: relative; display: grid; place-items: center; height: 100%; font-size: 12px; font-weight: 900; }
+.big-btn.claim { width: auto; margin: 0 16px 16px; animation: pulse-gift 1.3s ease-in-out infinite; }
+.pass-card { display: grid; gap: 10px; padding: 16px; border-radius: 16px; background: linear-gradient(150deg, #3a1d7a, #1b2c9f 60%); box-shadow: 0 0 0 2px #9b6cff inset, 0 10px 30px rgba(0, 0, 0, 0.35); }
+.pass-card.on { background: linear-gradient(150deg, #1d6b4f, #1b2c9f 60%); box-shadow: 0 0 0 2px var(--good) inset; }
+.pass-head { display: flex; gap: 12px; align-items: center; }
+.pass-head b { display: block; font-size: 19px; font-weight: 900; }
+.pass-head small { font-size: 12px; font-weight: 700; color: var(--soft); }
+.pass-logo { font-size: 36px; filter: drop-shadow(0 0 12px rgba(155, 108, 255, 0.8)); }
+.pass-perks { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; line-height: 1.4; font-weight: 600; }
+.pass-fair { margin: 0; font-size: 12px; color: var(--soft); font-style: italic; }
+.tr-head { display: grid; grid-template-columns: 1fr 44px 1fr; padding: 12px 12px 6px; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: var(--soft); text-align: center; }
+.track { display: grid; gap: 6px; padding: 0 12px 12px; }
+.tr-row { display: grid; grid-template-columns: 1fr 44px 1fr; gap: 6px; align-items: stretch; }
+.tr-num { display: grid; place-items: center; align-self: center; width: 34px; height: 34px; margin: auto; border-radius: 50%; background: var(--board-deep); font-weight: 900; font-size: 14px; color: var(--dim); }
+.tr-row.reached .tr-num { background: linear-gradient(160deg, #9b6cff, #ff4fa1); color: #fff; }
+.tr-row.next .tr-num { box-shadow: 0 0 0 2px #9b6cff; color: #fff; }
+.tr-cell { position: relative; display: grid; gap: 2px; align-content: center; min-height: 46px; padding: 7px 9px; border-radius: 10px; background: var(--board-2); font-size: 12px; font-weight: 800; color: var(--soft); }
+.tr-cell.reached { color: var(--white); background: #24339f; }
+.tr-cell.done { opacity: 0.55; }
+.tr-cell.locked { opacity: 0.6; }
+.tr-cell i { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 11px; }
+.tr-row .tr-cell:last-child { background: linear-gradient(150deg, rgba(122, 63, 208, 0.45), var(--board-2)); }
+.tr-row.reached .tr-cell:last-child:not(.locked) { background: linear-gradient(150deg, #7a3fd0, #24339f); }
+.kit { display: grid; gap: 12px; padding: 0 14px 14px; }
+.kit-row { display: grid; gap: 6px; }
+.kit-row > span { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; color: var(--soft); }
+.kit-name { display: flex; gap: 8px; }
+.kit-name input { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 9px; border: 0; background: var(--board-deep); color: var(--white); font: 700 15px var(--f-ui); }
+.claim-list { display: grid; gap: 6px; }
+.claim-list span { padding: 9px 12px; border-radius: 9px; background: var(--board-2); font-weight: 800; }
+.gift-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.pass-badge { font-size: 14px; }
+.mh-chip.season { background: linear-gradient(160deg, #7a3fd0, #3a1d7a); }
+.mh-chip.season.ready { animation: pulse-gift 1.2s ease-in-out infinite; box-shadow: 0 0 16px rgba(155, 108, 255, 0.7); }
+.tk-season { margin-top: 6px; font-size: 14px; font-weight: 800; color: #5a2aa8; }
+.box-card.navigo { box-shadow: 0 0 0 2px #9b6cff inset; background: linear-gradient(150deg, rgba(122, 63, 208, 0.35), transparent); }

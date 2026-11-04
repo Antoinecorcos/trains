@@ -53,6 +53,12 @@ export const BOXES = {
     tickets: [100, 250], parts: [8, 18], rameChance: 0.4, livreeChance: 0.3, staffChance: 0.75,
     weights: { commun: 18, rare: 45, epique: 26, legendaire: 9.5, mythique: 1.5 },
   },
+  navigo: {
+    name: 'Colis Navigo', price: null,
+    tickets: [400, 400], parts: [30, 30], rameChance: 0, livreeChance: 1, staffChance: 1,
+    weights: { commun: 0, rare: 0, epique: 0, legendaire: 100, mythique: 0 },
+    livreeWeights: { commun: 0, rare: 30, epique: 40, legendaire: 25, mythique: 5 },
+  },
   legendaire: {
     ...BOX_SHOP.legendaire,
     tickets: [250, 500], parts: [20, 40], rameChance: 1, livreeChance: 0.6, staffChance: 1,
@@ -72,8 +78,9 @@ function pickRarity(weights) {
 }
 
 function pickOf(table, rarity, exclude = []) {
-  let pool = Object.keys(table).filter((id) => table[id].rarity === rarity && !exclude.includes(id));
-  if (!pool.length) pool = Object.keys(table).filter((id) => !exclude.includes(id));
+  const ok = (id) => !exclude.includes(id) && !table[id].season; // les livrées de saison ne sortent jamais des colis
+  let pool = Object.keys(table).filter((id) => table[id].rarity === rarity && ok(id));
+  if (!pool.length) pool = Object.keys(table).filter(ok);
   return pool[Math.floor(rand() * pool.length)];
 }
 
@@ -137,7 +144,7 @@ export async function openBox(env, userId, kind) {
   let bonusParts = 0;
   const stmts = [env.DB.prepare('UPDATE boxes SET n = n - 1 WHERE user_id = ? AND kind = ?').bind(userId, kind)];
   if (rand() < def.livreeChance) {
-    const rarity = pickRarity(def.weights);
+    const rarity = pickRarity(def.livreeWeights ?? def.weights);
     const id = pickOf(LIVREES, rarity, ['origine']);
     const dup = await ownsLivree(env, userId, id);
     if (dup) bonusTickets += 60;
@@ -175,7 +182,7 @@ export async function openBox(env, userId, kind) {
 const RARITIES_ORDER = Object.fromEntries(Object.keys(RARITIES).map((k, i) => [k, i]));
 
 export async function buyBox(env, userId, kind) {
-  const def = BOXES[kind];
+  const def = BOX_SHOP[kind] ? BOXES[kind] : null;
   if (!def) throw Object.assign(new Error('Boîte inconnue.'), { status: 400 });
   const res = await env.DB.prepare('UPDATE wallet SET tickets = tickets - ? WHERE user_id = ? AND tickets >= ?').bind(def.price, userId, def.price).run();
   if (!res.meta.changes) throw Object.assign(new Error('Pas assez de tickets.'), { status: 400 });

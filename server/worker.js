@@ -11,6 +11,10 @@ import {
 import {
   NETWORK_SCHEMA, NETWORK_MIGRATIONS, network, collect, renovate, assignStaff, sabotage, pendingSabotage, runTicketsFx, weekly, bulletin, openLines,
 } from './network.js';
+import {
+  SAISON_SCHEMA, SAISON_MIGRATIONS, addXp, seasonState, claimAll, equipCosmetics, checkout, confirm, webhook, passHolders,
+} from './saison.js';
+import { xpFor } from '../public/js/drive/saison.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -65,8 +69,8 @@ export default {
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       if (!schemaReady) {
-        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA, ...NETWORK_SCHEMA].map((q) => env.DB.prepare(q)));
-        for (const q of [...MIGRATIONS, ...NETWORK_MIGRATIONS]) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
+        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA, ...NETWORK_SCHEMA, ...SAISON_SCHEMA].map((q) => env.DB.prepare(q)));
+        for (const q of [...MIGRATIONS, ...NETWORK_MIGRATIONS, ...SAISON_MIGRATIONS]) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
         schemaReady = true;
       }
       return await route(req, env, url);
@@ -148,6 +152,21 @@ async function route(req, env, url) {
     const key = url.searchParams.get('week') === 'current' ? weekKey(now) : weekKey(new Date(now.getTime() - 7 * 86400000));
     return json(await bulletin(env, key));
   }
+  // Saison et Pass Navigo
+  if (p === '/api/season' && m === 'GET') return json(await seasonState(env, await auth(req, env)));
+  if (p === '/api/season/claim' && m === 'POST') {
+    const u = await auth(req, env);
+    const got = await claimAll(env, u);
+    return json({ got, season: await seasonState(env, u), profile: await profile(env, u.id) });
+  }
+  if (p === '/api/cosmetics' && m === 'POST') { const u = await auth(req, env); await equipCosmetics(env, u, await body(req)); return json(await seasonState(env, u)); }
+  if (p === '/api/pass/checkout' && m === 'POST') { const u = await auth(req, env); return json(await checkout(env, u, await body(req), url.origin)); }
+  if (p === '/api/pass/confirm' && m === 'POST') {
+    const u = await auth(req, env);
+    const b = await body(req);
+    return json({ ...(await confirm(env, u, b.session_id, addEvent)), season: await seasonState(env, u) });
+  }
+  if (p === '/api/stripe/webhook' && m === 'POST') return json(await webhook(env, req, addEvent));
   throw new HttpError(404, 'Adresse inconnue.');
 }
 
@@ -368,21 +387,23 @@ async function submitRun(env, user, b) {
   }
   await addTickets(env, user.id, reward.tickets);
   await env.DB.prepare('UPDATE wallet SET runs = runs + 1 WHERE user_id = ?').bind(user.id).run();
+  const season = await addXp(env, user.id, xpFor(mission, res));
   for (const kind of reward.boxes) await addBox(env, user.id, kind);
 
   const rank = await env.DB.prepare('SELECT COUNT(*) AS n FROM best WHERE mission = ? AND score > ?').bind(mission.id, isBest ? res.score : prev.score).first();
   const total = await env.DB.prepare('SELECT COUNT(*) AS n FROM best WHERE mission = ?').bind(mission.id).first();
   return json({
     score: res.score, stars: res.stars, best: isBest, previous: prev?.score ?? null,
-    rank: rank.n + 1, players: total.n, crown, dethroned, reward, sabotage: sabotageOut,
+    rank: rank.n + 1, players: total.n, crown, dethroned, reward, sabotage: sabotageOut, season,
   });
 }
 
 async function leaderboard(env, missionId, user) {
   const mission = missionById(String(missionId || ''));
   if (!mission) throw new HttpError(400, 'Mission inconnue.');
-  const rows = await env.DB.prepare(`SELECT u.pseudo, b.score, b.stars, b.time, b.grades, b.rame, b.livree FROM best b JOIN users u ON u.id = b.user_id
-    WHERE b.mission = ? ORDER BY b.score DESC, b.at ASC LIMIT 20`).bind(mission.id).all();
+  const rows = await env.DB.prepare(`SELECT u.id, u.pseudo, b.score, b.stars, b.time, b.grades, b.rame, b.livree, w.rame_name FROM best b JOIN users u ON u.id = b.user_id
+    LEFT JOIN wallet w ON w.user_id = u.id WHERE b.mission = ? ORDER BY b.score DESC, b.at ASC LIMIT 20`).bind(mission.id).all();
+  const pass = await passHolders(env);
   let mine = null;
   if (user) {
     const b = await env.DB.prepare('SELECT score, stars FROM best WHERE user_id = ? AND mission = ?').bind(user.id, mission.id).first();
@@ -393,16 +414,17 @@ async function leaderboard(env, missionId, user) {
   }
   return json({
     mission: mission.id,
-    top: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, score: r.score, stars: r.stars, time: r.time, rame: r.rame, livree: r.livree, grades: JSON.parse(r.grades) })),
+    top: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, score: r.score, stars: r.stars, time: r.time, rame: r.rame, livree: r.livree, rameName: r.rame_name, pass: pass.has(r.id), grades: JSON.parse(r.grades) })),
     mine,
   });
 }
 
 async function ghost(env, missionId, pseudo) {
-  const row = await env.DB.prepare('SELECT b.frames, b.score, b.rame, b.livree, u.pseudo FROM best b JOIN users u ON u.id = b.user_id WHERE b.mission = ? AND u.pseudo = ?')
+  const row = await env.DB.prepare(`SELECT b.frames, b.score, b.rame, b.livree, u.pseudo, w.fx, w.emote, w.rame_name FROM best b JOIN users u ON u.id = b.user_id
+    LEFT JOIN wallet w ON w.user_id = u.id WHERE b.mission = ? AND u.pseudo = ?`)
     .bind(String(missionId || ''), String(pseudo || '')).first();
   if (!row) throw new HttpError(404, 'Pas de fantôme pour ce conducteur.');
-  return json({ pseudo: row.pseudo, score: row.score, rame: row.rame, livree: row.livree, frames: JSON.parse(row.frames) });
+  return json({ pseudo: row.pseudo, score: row.score, rame: row.rame, livree: row.livree, fx: row.fx, emote: row.emote, rameName: row.rame_name, frames: JSON.parse(row.frames) });
 }
 
 async function addEvent(env, kind, text) {
@@ -417,12 +439,13 @@ async function feed(env) {
 async function ranking(env) {
   const ids = MISSIONS.map((m) => m.id);
   const ph = ids.map(() => '?').join(',');
-  const rows = await env.DB.prepare(`SELECT u.pseudo, SUM(b.stars) AS stars, SUM(b.score) AS score, COUNT(*) AS missions
+  const pass = await passHolders(env);
+  const rows = await env.DB.prepare(`SELECT u.id, u.pseudo, SUM(b.stars) AS stars, SUM(b.score) AS score, COUNT(*) AS missions
     FROM best b JOIN users u ON u.id = b.user_id WHERE b.mission IN (${ph}) GROUP BY u.id ORDER BY stars DESC, score DESC LIMIT 50`).bind(...ids).all();
   const crowns = await env.DB.prepare(`SELECT u.pseudo, COUNT(*) AS n FROM best b JOIN users u ON u.id = b.user_id
     WHERE b.mission IN (${ph}) AND b.score = (SELECT MAX(score) FROM best b2 WHERE b2.mission = b.mission) GROUP BY u.id`).bind(...ids).all();
   const cmap = Object.fromEntries(crowns.results.map((c) => [c.pseudo, c.n]));
-  return json({ players: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, stars: r.stars, score: r.score, missions: r.missions, crowns: cmap[r.pseudo] || 0 })) });
+  return json({ players: rows.results.map((r, i) => ({ rank: i + 1, pseudo: r.pseudo, stars: r.stars, score: r.score, missions: r.missions, crowns: cmap[r.pseudo] || 0, pass: pass.has(r.id) })) });
 }
 
 const fmt = (n) => new Intl.NumberFormat('fr-FR').format(n);

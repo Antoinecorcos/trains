@@ -1,6 +1,6 @@
 // Accueil : carte du réseau, départs par ligne, dépôt (collection, colis), classement, fiche mission.
 import {
-  MISSIONS, LINES, LINE_UNLOCK, RAMES, LIVREES, RARITIES, BOX_SHOP, MAX_LEVEL, levelCost,
+  MISSIONS, LINES, LINE_UNLOCK, RAMES, LIVREES, RARITIES, BOX_SHOP, BOX_INFO, MAX_LEVEL, levelCost,
   dailyMission, weeklyMission, dailyKey, lineOf, buildRoute, compoOf,
 } from './route.js';
 import {
@@ -9,6 +9,9 @@ import {
 import { api } from './api.js';
 import { mountNetMap } from './netmap.js';
 import { trophyCard, bulletinCard, shareCanvas, invite } from './share.js';
+import {
+  TIERS, track, rewardLabel, THEMES, cosmeticLabel, PASS_PERKS,
+} from './saison.js';
 
 let netmap = null;
 
@@ -46,16 +49,22 @@ export function gear(m) {
 export async function refreshProfile() {
   if (!api.loggedIn) { state.profile = null; state.network = null; renderWallet(); return; }
   try {
-    const [p, n] = await Promise.all([api.profile(), api.network()]);
+    const [p, n, se] = await Promise.all([api.profile(), api.network(), api.season().catch(() => null)]);
     state.profile = p;
     setNetwork(n);
+    if (se) setSeason(se);
     if (p.welcomeBack) {
       const b = p.welcomeBack;
       C.audio.perfect();
-      C.toast(`Bon retour ! ${b.days} jours d'absence : +${b.tickets} 🎟 et un ${BOX_SHOP[b.box].name.toLowerCase()} au dépôt.`);
+      C.toast(`Bon retour ! ${b.days} jours d'absence : +${b.tickets} 🎟 et un ${BOX_INFO[b.box].name.toLowerCase()} au dépôt.`);
     }
   } catch { /* garde le précédent */ }
   renderWallet();
+}
+
+function setSeason(se) {
+  state.season = se;
+  C.audio.setHorn(se.equip.horn ? THEMES[Number(se.equip.horn.split(':')[1])].horn : null);
 }
 
 function setNetwork(n) {
@@ -134,6 +143,7 @@ export function showHome(tab = state.tab) {
   if (tab === 'reseau') renderReseau(body);
   else if (tab === 'departs') renderDeparts(body);
   else if (tab === 'depot') renderDepot(body);
+  else if (tab === 'saison') renderSaison(body);
   else renderClassement(body);
 }
 
@@ -231,6 +241,7 @@ function renderReseau(body) {
         ${agent}
         <span class="mh-right">
           ${state.network ? `<button class="mh-chip collect${isFull() ? ' full' : ''}" id="mh-collect" type="button" data-act="collect">💰 <b>${fr0.format(caisseTotal())}</b></button>` : ''}
+          ${state.season ? `<button class="mh-chip season${claimable(state.season) ? ' ready' : ''}" type="button" data-act="tab" data-tab="saison">✦ ${state.season.tier}/${TIERS}</button>` : ''}
           <span class="mh-chip">★ ${totalStars()}</span>
         </span>
       </div>
@@ -486,7 +497,12 @@ function renderDepot(body) {
   const p = state.profile;
   if (!p) { body.innerHTML = '<p class="muted pad">Chargement…</p>'; refreshProfile().then(() => showHome('depot')); return; }
   const own = Object.fromEntries(p.rames.map((r) => [r.id, r]));
-  const boxes = Object.entries(BOX_SHOP).map(([k, b]) => {
+  const navigo = p.boxes.navigo ? `<div class="box-card navigo">
+      <div class="box-ico">${boxIcon('navigo')}</div>
+      <div class="box-mid"><b>${BOX_INFO.navigo.name}</b><small>${BOX_INFO.navigo.hint}</small></div>
+      <div class="box-act"><button class="pill pill-good" type="button" data-act="open" data-kind="navigo">Ouvrir (${p.boxes.navigo})</button></div>
+    </div>` : '';
+  const boxes = navigo + Object.entries(BOX_SHOP).map(([k, b]) => {
     const n = p.boxes[k] || 0;
     return `<div class="box-card ${k}">
       <div class="box-ico">${boxIcon(k)}</div>
@@ -515,13 +531,13 @@ function renderDepot(body) {
       </div>
     </div>`;
   }).join('');
-  const livrees = Object.entries(LIVREES).map(([id, l]) => {
+  const livrees = Object.entries(LIVREES).filter(([id, l]) => !l.season || p.livrees.includes(id)).map(([id, l]) => {
     const has = p.livrees.includes(id);
     const eq = p.equip.livree === id;
     const rar = RAR(l.rarity);
     return `<button class="liv${has ? '' : ' locked'}${eq ? ' eq' : ''}" type="button" style="--rar:${rar.color}" ${has && !eq ? `data-act="equip-livree" data-id="${id}"` : ''}>
       <span class="sw" style="background:linear-gradient(180deg, ${l.body ?? '#eef1f5'} 0 55%, ${l.band ?? '#c4245f'} 55% 70%, ${l.body ?? '#eef1f5'} 70%)"></span>
-      <b>${has ? l.name : '???'}</b><small>${eq ? 'Portée' : has ? rar.label : `${rar.label} · à trouver`}</small>
+      <b>${has ? l.name : '???'}</b><small>${eq ? 'Portée' : l.season ? 'Saison · Pass Navigo' : has ? rar.label : `${rar.label} · à trouver`}</small>
     </button>`;
   }).join('');
   const net = state.network;
@@ -546,7 +562,7 @@ function renderDepot(body) {
     <section class="panel"><div class="panel-head"><h2>Livrées</h2><span class="muted">${p.livrees.length} / ${Object.keys(LIVREES).length}</span></div><div class="livs">${livrees}</div></section>`;
 }
 
-const boxIcon = (k) => `<svg viewBox="0 0 64 64" width="56" height="56"><rect x="8" y="22" width="48" height="34" rx="4" fill="${{ standard: '#c98a4b', rare: '#3b6fd8', legendaire: '#e2a400' }[k]}"/><rect x="5" y="14" width="54" height="12" rx="3" fill="${{ standard: '#a86e36', rare: '#2a55b0', legendaire: '#c48600' }[k]}"/><rect x="28" y="14" width="8" height="42" fill="#ffd200"/><path d="M32 14c-6-10-16-8-14-2 1 3 8 3 14 2zm0 0c6-10 16-8 14-2-1 3-8 3-14 2z" fill="#ffd200"/></svg>`;
+const boxIcon = (k) => `<svg viewBox="0 0 64 64" width="56" height="56"><rect x="8" y="22" width="48" height="34" rx="4" fill="${{ standard: '#c98a4b', rare: '#3b6fd8', legendaire: '#e2a400', navigo: '#7a3fd0' }[k]}"/><rect x="5" y="14" width="54" height="12" rx="3" fill="${{ standard: '#a86e36', rare: '#2a55b0', legendaire: '#c48600', navigo: '#5a2aa8' }[k]}"/><rect x="28" y="14" width="8" height="42" fill="#ffd200"/><path d="M32 14c-6-10-16-8-14-2 1 3 8 3 14 2zm0 0c6-10 16-8 14-2-1 3-8 3-14 2z" fill="#ffd200"/></svg>`;
 
 // Petite silhouette de rame (vignettes du dépôt et des colis)
 export function trainSvg(id, livreeId, unknown = false) {
@@ -580,7 +596,7 @@ export async function openBoxFlow(kind) {
   const items = res.items;
   let i = -1;
   scr.hidden = false;
-  scr.innerHTML = `<div class="box-stage"><p class="box-title">${BOX_SHOP[kind].name}</p><div class="box-big shake">${boxIcon(kind).replace('width="56" height="56"', 'width="170" height="170"')}</div><p class="box-tap">Touche pour ouvrir</p></div>`;
+  scr.innerHTML = `<div class="box-stage"><p class="box-title">${BOX_INFO[kind].name}</p><div class="box-big shake">${boxIcon(kind).replace('width="56" height="56"', 'width="170" height="170"')}</div><p class="box-tap">Touche pour ouvrir</p></div>`;
   C.audio.click();
   const next = () => {
     i++;
@@ -621,7 +637,7 @@ async function claimDaily() {
     const r = await api.daily();
     state.profile = r.profile;
     C.audio.good();
-    C.toast(`Jour ${r.gift.day} : +${r.gift.tickets} 🎟 et un ${BOX_SHOP[r.gift.box].name.toLowerCase()}`);
+    C.toast(`Jour ${r.gift.day} : +${r.gift.tickets} 🎟 et un ${BOX_INFO[r.gift.box].name.toLowerCase()}`);
     openBoxFlow(r.gift.box);
     showHome('reseau');
   } catch (err) { C.toast(err.message); }
@@ -650,7 +666,7 @@ async function renderClassement(body) {
     const list = players.length ? players.map((p) => `
       <div class="row rk-row${api.user && p.pseudo === api.user.pseudo ? ' me' : ''}">
         <span class="row-time">${p.rank}</span>
-        <span class="row-mid"><span class="row-dest">${esc(p.pseudo)}${p.crowns ? ` <span class="crowns">👑×${p.crowns}</span>` : ''}</span><span class="row-type">${p.missions} mission${p.missions > 1 ? 's' : ''} · ${fr0.format(p.score)} pts</span></span>
+        <span class="row-mid"><span class="row-dest">${esc(p.pseudo)}${p.pass ? ' <span class="pass-badge">🎫</span>' : ''}${p.crowns ? ` <span class="crowns">👑×${p.crowns}</span>` : ''}</span><span class="row-type">${p.missions} mission${p.missions > 1 ? 's' : ''} · ${fr0.format(p.score)} pts</span></span>
         <span class="row-stars">${p.stars} ★</span>
         ${api.loggedIn && api.user.pseudo !== p.pseudo ? `<button class="sabo-btn${token ? '' : ' off'}" type="button" data-act="sabo" data-pseudo="${esc(p.pseudo)}" aria-label="Saboter ${esc(p.pseudo)}">😈</button>` : ''}
       </div>`).join('') : '<p class="muted pad">Personne n\'a encore roulé. À toi l\'honneur.</p>';
@@ -673,6 +689,118 @@ async function renderClassement(body) {
   } catch (err) {
     body.innerHTML = `<section class="panel"><p class="muted pad">${esc(err.message)}</p></section>`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Onglet Saison : progression du mois, Pass Navigo, panoplie
+// ---------------------------------------------------------------------------
+
+const claimable = (se) => track(se.key).reduce((n, t) => n + (t.tier <= se.tier ? (se.claimed.includes(`f${t.tier}`) ? 0 : 1) + (se.pass && !se.claimed.includes(`p${t.tier}`) ? 1 : 0) : 0), 0);
+
+async function renderSaison(body) {
+  if (!api.online || !api.loggedIn) {
+    body.innerHTML = `<section class="panel"><div class="panel-head"><h2>Saison</h2></div><p class="muted pad">${api.online ? 'Connecte-toi pour gagner des paliers de saison et récupérer tes récompenses.' : 'Hors ligne : la saison n\'est disponible que sur le jeu en ligne.'}</p></section>`;
+    return;
+  }
+  if (!state.season) { body.innerHTML = '<p class="muted pad">Chargement…</p>'; try { setSeason(await api.season()); } catch (err) { body.innerHTML = `<p class="muted pad">${esc(err.message)}</p>`; return; } }
+  const se = state.season;
+  const t = THEMES[se.key % 100];
+  const inTier = se.tier >= TIERS ? se.perTier : se.xp % se.perTier;
+  const n = claimable(se);
+  const cell = (rewards, reached, done, locked) => `<div class="tr-cell${reached ? ' reached' : ''}${done ? ' done' : ''}${locked ? ' locked' : ''}">${rewards.map((r) => `<span>${rewardLabel(r, LIVREES)}</span>`).join('')}${done ? '<i>✓</i>' : locked ? '<i>🔒</i>' : ''}</div>`;
+  const rows = track(se.key).map((tr) => {
+    const reached = tr.tier <= se.tier;
+    return `<div class="tr-row${reached ? ' reached' : ''}${tr.tier === se.tier + 1 ? ' next' : ''}">
+      ${cell(tr.free, reached, se.claimed.includes(`f${tr.tier}`), false)}
+      <span class="tr-num">${tr.tier}</span>
+      ${cell(tr.pass, reached, se.claimed.includes(`p${tr.tier}`), !se.pass)}
+    </div>`;
+  }).join('');
+  const passCard = se.pass
+    ? `<div class="pass-card on"><div class="pass-head"><span class="pass-logo">🎫</span><div><b>Pass Navigo actif</b><small>${se.giftedBy ? `Offert par ${esc(se.giftedBy)} · ` : ''}jusqu'à la fin de ${esc(se.name.split(' ')[0])} (${se.daysLeft} j)</small></div></div>
+        <ul class="pass-perks"><li>Piste Pass débloquée : 2 Colis Navigo, livrée « ${esc(t.livree.name)} »</li><li>Caisses jusqu'à ${5 + PASS_PERKS.capHours} h, ${2 + PASS_PERKS.chantiers} chantiers en même temps</li></ul>
+        <button class="ghost-btn" type="button" data-act="pass-gift">🎁 Offrir le Pass à un pote</button></div>`
+    : `<div class="pass-card"><div class="pass-head"><span class="pass-logo">🎫</span><div><b>Pass Navigo · ${esc(se.name)}</b><small>2,99 € pour le mois, sans abonnement · encore ${se.daysLeft} j</small></div></div>
+        <ul class="pass-perks">
+          <li><b>2 Colis Navigo</b> : une carte légendaire garantie (souvent un pote), une livrée, 400 🎟 et 30 ⚙</li>
+          <li>La livrée du mois « ${esc(t.livree.name)} », le klaxon « ${esc(t.hornName)} », une traînée lumineuse et l'emote ${t.emote} pour ton fantôme</li>
+          <li>Badge 🎫, nom de ta rame, cadre doré sur tes images</li>
+          <li>Caisses jusqu'à ${5 + PASS_PERKS.capHours} h, ${2 + PASS_PERKS.chantiers} chantiers en même temps</li>
+          <li>Les paliers déjà atteints sont récupérables tout de suite</li>
+        </ul>
+        <p class="pass-fair">Jamais de rames, de points ni d'avantage sur les défis : seulement du style et du confort.</p>
+        ${se.payments ? '<button class="big-btn" type="button" data-act="pass-buy">Prendre le Pass · 2,99 €</button><button class="ghost-btn" type="button" data-act="pass-gift">🎁 L\'offrir à un pote</button>' : '<button class="big-btn off" type="button" disabled>Paiement bientôt disponible</button>'}</div>`;
+  const own = se.cosmetics;
+  const owned = (kind) => own.filter((c) => c.startsWith(`${kind}:`));
+  const opts = (kind, label) => {
+    const list = owned(kind);
+    if (!list.length) return '';
+    return `<div class="kit-row"><span>${label}</span><div class="gear-pick">
+      <button type="button" class="chip-btn${!se.equip[kind] ? ' on' : ''}" data-act="equip-${kind}" data-id="">Aucun${kind === 'horn' ? ' (d\'origine)' : ''}</button>
+      ${list.map((c) => `<button type="button" class="chip-btn${se.equip[kind] === c ? ' on' : ''}" data-act="equip-${kind}" data-id="${c}">${kind === 'emote' ? THEMES[Number(c.split(':')[1])].emote : kind === 'horn' ? THEMES[Number(c.split(':')[1])].hornName : `Traînée ${['', 'janv.', 'févr.', 'mars', 'avril', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][Number(c.split(':')[1])]}`}</button>`).join('')}
+    </div></div>`;
+  };
+  const kit = [
+    opts('horn', 'Klaxon'), opts('fx', 'Fantôme'), opts('emote', 'Emote'),
+    own.includes('rename') ? `<div class="kit-row"><span>Nom de ta rame</span><div class="kit-name"><input id="rame-name" maxlength="24" placeholder="La Bête de Trappes" value="${esc(se.equip.rameName ?? '')}"><button class="pill pill-ok" type="button" data-act="rame-name">OK</button></div></div>` : '',
+    own.includes('frame') ? '<div class="kit-row"><span>Images</span><small class="muted">Cadre doré activé sur tes images partagées</small></div>' : '',
+  ].join('');
+  body.innerHTML = `
+    <section class="board season">
+      <div class="board-head"><div><h1 class="board-title">Saison de ${esc(se.name.split(' ')[0])}</h1><p class="board-sub">Encore ${se.daysLeft} j · +10 par service, +5 par étoile, +15 pour les défis</p></div><span class="season-tier"><b>${se.tier}</b>/${TIERS}</span></div>
+      <div class="season-bar"><i style="width:${Math.round((inTier / se.perTier) * 100)}%"></i><span>${se.tier >= TIERS ? 'Saison terminée, bravo !' : `${inTier} / ${se.perTier} pts avant le palier ${se.tier + 1}`}</span></div>
+      ${n ? `<button class="big-btn claim" type="button" data-act="season-claim">Récupérer ${n} récompense${n > 1 ? 's' : ''}</button>` : ''}
+    </section>
+    ${passCard}
+    <section class="board">
+      <div class="tr-head"><span>Gratuit</span><span></span><span>🎫 Pass</span></div>
+      <div class="track">${rows}</div>
+    </section>
+    ${kit ? `<section class="panel"><div class="panel-head"><h2>Ma panoplie</h2></div><div class="kit">${kit}</div></section>` : ''}`;
+}
+
+async function claimSeason() {
+  try {
+    const r = await api.claimSeason();
+    setSeason(r.season);
+    state.profile = r.profile;
+    renderWallet();
+    C.audio.perfect();
+    modal(`<h2 class="ui-title">Récompenses de saison</h2><div class="claim-list">${r.got.map((g) => `<span>${rewardLabel(g, LIVREES)}</span>`).join('')}</div>
+      ${r.got.some((g) => g.type === 'box') ? '<p class="ui-sub">Les colis t\'attendent au dépôt.</p><button class="big-btn" type="button" data-act="tab" data-tab="depot">Aller les ouvrir</button>' : ''}`);
+    showHome('saison');
+  } catch (err) { C.toast(err.message); }
+}
+
+async function buyPass(gift) {
+  try {
+    const r = await api.passCheckout(gift);
+    C.toast('Redirection vers le paiement sécurisé…');
+    location.href = r.url;
+  } catch (err) { C.toast(err.message); }
+}
+
+async function openGift() {
+  let players = state.targets;
+  if (!players?.length) { try { players = (await api.targets()).players; state.targets = players; } catch (err) { C.toast(err.message); return; } }
+  modal(`<h2 class="ui-title">🎁 Offrir le Pass Navigo</h2><p class="ui-sub">2,99 € pour ce mois-ci. Tout le groupe saura que c'est toi.</p>
+    <div class="gift-list">${players.map((p) => `<button class="chip-btn" type="button" data-act="pass-gift-go" data-pseudo="${esc(p.pseudo)}">${esc(p.pseudo)}</button>`).join('') || '<p class="muted">Personne d\'autre pour l\'instant.</p>'}</div>`);
+}
+
+// Retour de la page de paiement Stripe
+export async function handlePassReturn() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('pass')) return;
+  history.replaceState(null, '', location.pathname);
+  if (q.get('pass') !== 'ok') { C.toast('Paiement annulé : rien n\'a été débité.'); return; }
+  try {
+    const r = await api.passConfirm(q.get('session_id'));
+    if (!r.paid) { C.toast('Paiement en cours de validation, réessaie dans un instant.'); return; }
+    setSeason(r.season);
+    C.audio.perfect();
+    C.toast(r.gift ? '🎁 Pass offert ! Le fil d\'actu est au courant.' : '🎫 Pass Navigo activé : récupère tes récompenses !');
+    showHome(r.gift ? 'classement' : 'saison');
+  } catch (err) { C.toast(err.message); }
 }
 
 // Fenêtre par-dessus l'accueil (sabotage, bulletin)
@@ -825,7 +953,7 @@ function renderGhostChoice(m, lb) {
   };
   let html = '<p class="feed-title">Rouler contre</p>';
   if (lb && lb.top.length) {
-    html += lb.top.slice(0, 5).map((r) => opt('player', r.pseudo, `<b>${r.rank === 1 ? '👑' : `${r.rank}.`} ${esc(r.pseudo)}</b>`, `${fr0.format(r.score)} pts · ${'★'.repeat(r.stars)} · ${esc(RAMES[r.rame]?.name ?? 'Z 2N')}`)).join('');
+    html += lb.top.slice(0, 5).map((r) => opt('player', r.pseudo, `<b>${r.rank === 1 ? '👑' : `${r.rank}.`} ${esc(r.pseudo)}${r.pass ? ' 🎫' : ''}</b>`, `${fr0.format(r.score)} pts · ${'★'.repeat(r.stars)} · ${esc(RAMES[r.rame]?.name ?? 'Z 2N')}${r.rameName ? ` « ${esc(r.rameName)} »` : ''}`)).join('');
     if (lb.mine && lb.mine.rank > 5) html += `<p class="acc-note">Toi : ${lb.mine.rank}e · ${fr0.format(lb.mine.score)} pts</p>`;
   }
   if (hasMe && !(lb && lb.top.some((r) => api.user && r.pseudo === api.user.pseudo && r.rank <= 5))) html += opt('me', null, '<b>Ton record</b>', 'Ton meilleur passage');

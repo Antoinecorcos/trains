@@ -127,3 +127,52 @@ const bl = await call('/api/bulletin?week=current');
 console.log('bulletin', bl.status, { runs: bl.data.runs, crowns: bl.data.crowns, sabotages: bl.data.sabotages, mostActive: bl.data.mostActive, udor: bl.data.udor });
 const fd2 = await call('/api/feed');
 console.log('feed', fd2.data.events.slice(0, 5).map((e) => e.text));
+
+// ---- Saison et Pass Navigo (paiement simulé par un webhook signé : STRIPE_WEBHOOK_SECRET=whsec_test_local dans .dev.vars) ----
+const { createHmac } = await import('node:crypto');
+let ss = await call('/api/season', {}, tok);
+console.log('season', ss.status, { key: ss.data.key, name: ss.data.name, xp: ss.data.xp, tier: ss.data.tier, pass: ss.data.pass, payments: ss.data.payments });
+for (let i = 0; i < 2; i++) await call('/api/runs', { method: 'POST', body: JSON.stringify({ mission: 'm1', log: good.log }) }, tok);
+ss = await call('/api/season', {}, tok);
+console.log('xp après services', ss.data.xp, 'palier', ss.data.tier);
+let cl = await call('/api/season/claim', { method: 'POST' }, tok);
+console.log('claim gratuit', cl.status, cl.data.error ?? cl.data.got);
+const co = await call('/api/pass/checkout', { method: 'POST', body: '{}' }, tok);
+console.log('checkout sans Stripe', co.status, co.data.error);
+const sign = (payload) => { const t = Math.floor(Date.now() / 1000); return `t=${t},v1=${createHmac('sha256', 'whsec_test_local').update(`${t}.${payload}`).digest('hex')}`; };
+const hook = async (obj, bad) => {
+  const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: obj } });
+  const r = await fetch(`${BASE}/api/stripe/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': bad ? 't=1,v1=00' : sign(payload) }, body: payload });
+  return { status: r.status, data: await r.json() };
+};
+const me2 = await call('/api/me', {}, tok);
+const meB = await call('/api/me', {}, b.data.token);
+const sess = { id: `cs_test_${stamp}`, payment_status: 'paid', amount_total: 299, metadata: { buyer: String(me2.data.user.id), target: String(me2.data.user.id), season: String(ss.data.key) } };
+console.log('webhook mal signé', (await hook(sess, true)).status);
+console.log('webhook', (await hook(sess)).data, 'rejoué', (await hook(sess)).data);
+ss = await call('/api/season', {}, tok);
+console.log('pass actif', ss.data.pass);
+cl = await call('/api/season/claim', { method: 'POST' }, tok);
+console.log('claim pass', cl.status, cl.data.got);
+ss = await call('/api/season', {}, tok);
+console.log('cosmétiques', ss.data.cosmetics);
+const eq = await call('/api/cosmetics', { method: 'POST', body: JSON.stringify({ rameName: 'La Bête de Trappes' }) }, tok);
+console.log('nom de rame', eq.status, eq.data.equip ?? eq.data.error);
+const hornBad = await call('/api/cosmetics', { method: 'POST', body: JSON.stringify({ horn: 'horn:12' }) }, tok);
+console.log('klaxon non possédé', hornBad.status, hornBad.data.error);
+const netP = await call('/api/network', {}, tok);
+console.log('avantages Pass', { slots: netP.data.slots, caisseU: netP.data.caisses.U });
+// cadeau : Antoine offre le Pass à Thomas
+const gift = { id: `cs_test_gift_${stamp}`, payment_status: 'paid', amount_total: 299, metadata: { buyer: String(me2.data.user.id), target: String(meB.data.user.id), season: String(ss.data.key) } };
+console.log('cadeau', (await hook(gift)).data);
+const coAgain = await call('/api/pass/checkout', { method: 'POST', body: JSON.stringify({ gift: `Thomas${stamp}` }) }, tok);
+console.log('re-offrir', coAgain.status, coAgain.data.error);
+const rk2 = await call('/api/ranking');
+console.log('badges', rk2.data.players.filter((x) => x.pseudo.endsWith(String(stamp))).map((x) => `${x.pseudo} ${x.pass ? '🎫' : ''}`));
+const fd3 = await call('/api/feed');
+console.log('fil', fd3.data.events.slice(0, 3).map((e) => e.text));
+// Colis Navigo
+prof = await call('/api/profile', {}, tok);
+if (prof.data.boxes.navigo) { const o = await call('/api/box/open', { method: 'POST', body: JSON.stringify({ kind: 'navigo' }) }, tok); console.log('Colis Navigo', o.status, o.data.items ?? o.data.error); }
+const buyNav = await call('/api/box/buy', { method: 'POST', body: JSON.stringify({ kind: 'navigo' }) }, tok);
+console.log('acheter un Colis Navigo', buyNav.status, buyNav.data.error);

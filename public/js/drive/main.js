@@ -2,13 +2,14 @@
 import { MISSIONS, dailyMission, weeklyMission, lineOf, buildRoute } from './route.js';
 import { SABOTAGES } from './reseau.js';
 import { runCard, shareCanvas } from './share.js';
+import { THEMES, TIERS } from './saison.js';
 import {
   DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { api } from './api.js';
-import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage, openAccountModal } from './home.js';
+import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage, openAccountModal, handlePassReturn } from './home.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -27,6 +28,7 @@ let run = null;
 let mission = null;
 let sched = null;
 let ghost = null;
+let ghostBehind = false; // le fantôme était derrière le joueur (pour déclencher son emote)
 let running = false;
 let paused = false;
 let acc = 0;
@@ -163,6 +165,8 @@ async function startMission(m) {
   if (!schedCache[m.id]) schedCache[m.id] = computeSchedule(m);
   sched = schedCache[m.id];
   ghost = await loadGhost(m);
+  ghostBehind = false;
+  world.emote = null;
   starting = false;
   const g = gear(m);
   // le sabotage d'un pote s'ajoute au parcours ; l'horaire reste celui du service normal
@@ -197,14 +201,14 @@ async function loadGhost(m) {
   try {
     if (choice.type === 'player' && api.online) {
       const g = await api.ghost(m.id, choice.pseudo);
-      return { frames: g.frames, label: g.pseudo, rame: g.rame, livree: g.livree };
+      return { frames: g.frames, label: g.pseudo, sub: g.rameName, rame: g.rame, livree: g.livree, fx: g.fx, emote: g.emote };
     }
     if (choice.type === 'me') {
       const local = store.get(ghostKey(m.id), null);
       if (local) return Array.isArray(local) ? { frames: local, label: 'Ton record' } : { ...local, label: 'Ton record' };
       if (api.loggedIn) {
         const g = await api.ghost(m.id, api.user.pseudo);
-        return { frames: g.frames, label: 'Ton record', rame: g.rame, livree: g.livree };
+        return { frames: g.frames, label: 'Ton record', sub: g.rameName, rame: g.rame, livree: g.livree, fx: g.fx, emote: g.emote };
       }
     }
   } catch { /* fantôme indisponible : on roule avec le titulaire */ }
@@ -243,7 +247,16 @@ function frame(ts) {
   }
   if (run) {
     const gx = ghostAt(run.t);
-    const ghosts = gx != null ? [{ x: gx, label: ghost.label, rame: ghost.rame, livree: ghost.livree }] : [];
+    // emote du fantôme quand il repasse devant le joueur
+    if (gx != null && ghost.emote) {
+      const ahead = gx > run.x + 2;
+      if (ahead && ghostBehind && run.t > 3) world.emote = { text: THEMES[Number(ghost.emote.split(':')[1])].emote, at: ts };
+      ghostBehind = !ahead;
+    }
+    const ghosts = gx != null ? [{
+      x: gx, label: ghost.label, sub: ghost.sub, rame: ghost.rame, livree: ghost.livree,
+      fx: ghost.fx ? THEMES[Number(ghost.fx.split(':')[1])].fx : null, emote: ghost.emote,
+    }] : [];
     world.draw(run, ghosts, ts);
     updateHud();
   } else {
@@ -825,6 +838,9 @@ async function sendRun(m, item) {
         ? `<div class="tk-sabo ok">🛡️ Sabotage de <b>${esc(s.by)}</b> déjoué ! +${s.bonus} 🎟</div>`
         : `<div class="tk-sabo">😈 Le sabotage de <b>${esc(s.by)}</b> (${SABOTAGES[s.kind].name.toLowerCase()}) t'a eu. Tout le groupe va le savoir.</div>`;
     }
+    if (r.season) {
+      html += `<div class="tk-season">✦ +${r.season.gained} pts de saison${r.season.tierUp ? ` · <b>palier ${r.season.tier}/${TIERS} atteint !</b>` : ''}</div>`;
+    }
     if (r.reward) {
       html += `<div class="tk-reward">+${fr0.format(r.reward.tickets)} 🎟${r.reward.boxes.map((k) => ` · 🎁 ${k === 'rare' ? 'colis rare' : 'colis'}`).join('')}</div>`;
       if (r.reward.boxes.length) html += `<button class="pill pill-good tk-open" type="button" id="tk-open" data-kind="${r.reward.boxes[0]}">Ouvrir le colis</button>`;
@@ -856,6 +872,7 @@ async function shareResult() {
     line: l.id, title: mission.title, route: `${l.stations[mission.from].name} → ${l.stations[mission.to].name}`,
     score: fr0.format(r?.score ?? res.score), stars: r?.stars ?? res.stars, grades: res.grades.map((g) => g.grade),
     headline, pseudo, date: new Date().toLocaleDateString('fr-FR'),
+    frame: !!home.season?.cosmetics?.includes('frame'),
   });
   const how = await shareCanvas(cv, `ukipu-${mission.id}`, `${pseudo} sur « ${mission.title} » : ${fr0.format(res.score)} pts. Fais mieux : ${location.origin}`);
   if (how === 'downloaded') toast('Image enregistrée : à glisser dans le groupe');
@@ -901,6 +918,7 @@ function boot() {
     await refreshProfile();
     if (!$('screen-start').hidden) showHome();
     flushPending();
+    handlePassReturn();
   });
 }
 

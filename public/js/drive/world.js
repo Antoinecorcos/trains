@@ -1031,16 +1031,61 @@ export class World {
       }
     }
     ctx.restore();
+    if (ghost && opts.fx) this.ghostTrail(nose - CAR * cars, opts.fx, now);
     if (ghost && opts.label) {
       const x = this.X(nose);
       if (x > 0 && x < this.w) {
         ctx.font = `800 ${Math.max(10, k)}px ${FONT}`;
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.textAlign = 'right';
-        ctx.fillText(opts.label, x - 4, y - k * 4.8);
+        ctx.fillText(opts.sub ? `${opts.label} · « ${opts.sub} »` : opts.label, x - 4, y - k * 4.8);
+        // emote du fantôme (Pass Navigo) : bulle au-dessus de la cabine pendant 2 s
+        if (this.emote && now - this.emote.at < 2000) {
+          const f = (now - this.emote.at) / 2000;
+          const by = y - k * 7 - f * k * 2;
+          ctx.globalAlpha = 1 - Math.max(0, (f - 0.7) / 0.3);
+          ctx.fillStyle = '#ffffff';
+          this.rr(x - k * 2.4, by - k * 1.4, k * 2.8, k * 2.4, k * 0.8);
+          ctx.font = `${k * 1.6}px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(this.emote.text, x - k, by - k * 0.2);
+          ctx.textBaseline = 'alphabetic';
+          ctx.globalAlpha = 1;
+        }
       }
     }
     void v;
+  }
+
+  // Traînée lumineuse derrière un fantôme (Pass Navigo)
+  ghostTrail(tail, color, now) {
+    const { ctx, k } = this;
+    const y = this.railY - k * 2.4;
+    const x0 = this.X(tail);
+    const len = k * 26;
+    if (x0 < -10 || x0 - len > this.w) return;
+    const g = ctx.createLinearGradient(x0, 0, x0 - len, 0);
+    g.addColorStop(0, `${color}cc`);
+    g.addColorStop(1, `${color}00`);
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x0, y - k * 1.6);
+    ctx.quadraticCurveTo(x0 - len * 0.5, y - k * 0.6, x0 - len, y);
+    ctx.quadraticCurveTo(x0 - len * 0.5, y + k * 0.6, x0, y + k * 1.6);
+    ctx.fill();
+    for (let i = 0; i < 8; i++) {
+      const f = ((now / 700 + i / 8) % 1);
+      ctx.globalAlpha = 1 - f;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(x0 - f * len, y + Math.sin(i * 2.3 + now / 300) * k * 0.9, k * 0.18 * (1 - f) + 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawForeground(run) {

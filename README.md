@@ -8,6 +8,12 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.4 — saison mensuelle et Pass Navigo
+
+- **Onglet Saison** : chaque service rapporte des points (+10, +5 par étoile, +15 pour les défis). 20 paliers par mois, piste gratuite pour tous.
+- **Pass Navigo** (2,99 € le mois, paiement unique, sans abonnement, à s'offrir ou à offrir à un pote) : piste Pass avec 2 **Colis Navigo** (carte légendaire garantie, livrée, tickets, pièces), livrée du mois, klaxon de saison, traînée et emote du fantôme, badge 🎫, nom de rame, cadre doré ; caisses à 8 h et 3 chantiers. Jamais de rames ni de points.
+- Paiement par Stripe : voir [`docs/PASS.md`](docs/PASS.md).
+
 ## V2.3 — prêt pour le lancement
 
 - **Intro des nouveaux** : trois écrans puis directement le premier service, sans compte. Le score part au classement dès la création du compte.

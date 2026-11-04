@@ -60,8 +60,10 @@ export class Audio {
     // Klaxon : deux tons
     this.hornGain = ctx.createGain();
     this.hornGain.gain.value = 0;
-    for (const f of [311, 370]) {
+    this.hornOsc = [];
+    for (const f of this.hornNotes ?? [311, 370]) {
       const o = ctx.createOscillator();
+      this.hornOsc.push(o);
       o.type = 'sawtooth';
       o.frequency.value = f;
       const f2 = ctx.createBiquadFilter();
@@ -99,6 +101,16 @@ export class Audio {
     this.rollF.frequency.setTargetAtTime(120 + v * 8, t, 0.1);
     const brake = run.lever < 0 && v > 0.3 ? Math.min(1, -run.lever) : 0;
     this.brakeGain.gain.setTargetAtTime(brake * 0.05 + (run.slip ? 0.06 : 0), t, 0.05);
+  }
+
+  // Klaxon de saison : deux autres tons (le klaxon d'origine si null)
+  setHorn(notes) {
+    this.hornNotes = notes ?? [311, 370];
+    if (this.hornOsc) this.hornOsc.forEach((o, i) => o.frequency.setValueAtTime(this.hornNotes[i], this.ctx.currentTime));
+  }
+
+  hornPreview(notes) {
+    for (const f of notes ?? [311, 370]) this.tone(f, 0.5, 'sawtooth', 0.05);
   }
 
   horn(on) {

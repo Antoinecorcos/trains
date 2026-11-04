@@ -104,4 +104,9 @@ export const api = {
   targets: () => api.call('/api/targets'),
   weekly: () => api.call('/api/weekly'),
   bulletin: (week = 'last') => api.call(`/api/bulletin?week=${week}`),
+  season: () => api.call('/api/season'),
+  claimSeason: () => api.call('/api/season/claim', { method: 'POST' }),
+  cosmetics: (b) => api.call('/api/cosmetics', { method: 'POST', body: b }),
+  passCheckout: (gift) => api.call('/api/pass/checkout', { method: 'POST', body: gift ? { gift } : {} }),
+  passConfirm: (sessionId) => api.call('/api/pass/confirm', { method: 'POST', body: { session_id: sessionId } }),
 };
