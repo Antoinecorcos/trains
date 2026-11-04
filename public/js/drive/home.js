@@ -8,6 +8,7 @@ import {
 } from './reseau.js';
 import { api } from './api.js';
 import { mountNetMap } from './netmap.js';
+import { VERSION } from './version.js';
 import { trophyCard, bulletinCard, shareCanvas, invite } from './share.js';
 import {
   TIERS, track, rewardLabel, THEMES, cosmeticLabel, PASS_PERKS,
@@ -781,7 +782,8 @@ async function renderSaison(body) {
       <div class="tr-head"><span>Gratuit</span><span></span><span>🎫 Pass</span></div>
       <div class="track">${rows}</div>
     </section>
-    ${kit ? `<section class="panel"><div class="panel-head"><h2>Ma panoplie</h2></div><div class="kit">${kit}</div></section>` : ''}`;
+    ${kit ? `<section class="panel"><div class="panel-head"><h2>Ma panoplie</h2></div><div class="kit">${kit}</div></section>` : ''}
+    <p class="version-note">Ukipu ${VERSION}</p>`;
 }
 
 async function claimSeason() {
@@ -798,11 +800,18 @@ async function claimSeason() {
 }
 
 async function buyPass(gift) {
+  // retour visible tout de suite : le serveur prépare la page Stripe (une ou deux secondes)
+  const btns = document.querySelectorAll('[data-act="pass-buy"], [data-act="pass-gift-go"]');
+  btns.forEach((b) => { b.disabled = true; b.dataset.label = b.textContent; b.textContent = 'Ouverture du paiement…'; });
+  C.toast('Ouverture de la page de paiement Stripe…');
   try {
     const r = await api.passCheckout(gift);
-    C.toast('Redirection vers le paiement sécurisé…');
-    location.href = r.url;
-  } catch (err) { C.toast(err.message); }
+    if (!r.url) throw new Error('Stripe n\'a pas renvoyé de page de paiement.');
+    location.assign(r.url);
+  } catch (err) {
+    C.toast(`Paiement impossible : ${err.message}`);
+    btns.forEach((b) => { b.disabled = false; b.textContent = b.dataset.label; });
+  }
 }
 
 async function openGift() {

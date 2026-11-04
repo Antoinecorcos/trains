@@ -15,6 +15,7 @@ import {
   SAISON_SCHEMA, SAISON_MIGRATIONS, addXp, seasonState, claimAll, equipCosmetics, checkout, confirm, webhook, passHolders,
 } from './saison.js';
 import { xpFor } from '../public/js/drive/saison.js';
+import { VERSION } from '../public/js/drive/version.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -100,7 +101,7 @@ async function body(req) {
 async function route(req, env, url) {
   const p = url.pathname;
   const m = req.method;
-  if (p === '/api/health') return json({ ok: true, today: dailyKey() });
+  if (p === '/api/health') return json({ ok: true, today: dailyKey(), version: VERSION });
   if (p === '/api/register' && m === 'POST') return register(env, await body(req));
   if (p === '/api/login' && m === 'POST') return login(env, await body(req));
   if (p === '/api/logout' && m === 'POST') return logout(req, env);

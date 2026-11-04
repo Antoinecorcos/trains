@@ -3,6 +3,7 @@ import { MISSIONS, dailyMission, weeklyMission, lineOf, buildRoute } from './rou
 import { SABOTAGES } from './reseau.js';
 import { runCard, shareCanvas } from './share.js';
 import { THEMES, TIERS } from './saison.js';
+import { VERSION } from './version.js';
 import {
   DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform,
 } from './sim.js';
@@ -905,6 +906,17 @@ function range(a, b) {
 
 // ---------------------------------------------------------------------------
 
+// Si le serveur a une version plus récente que la page chargée (cache du téléphone), on propose de recharger
+function checkVersion() {
+  if (!api.serverVersion || api.serverVersion === VERSION) return;
+  const bar = document.createElement('button');
+  bar.type = 'button';
+  bar.className = 'update-bar';
+  bar.textContent = `Nouvelle version du jeu (${api.serverVersion}) · touche pour recharger`;
+  bar.onclick = () => location.reload();
+  document.body.appendChild(bar);
+}
+
 function boot() {
   world = new World($('world'));
   new ResizeObserver(() => world.resize()).observe($('world-wrap'));
@@ -919,6 +931,7 @@ function boot() {
     if (!$('screen-start').hidden) showHome();
     flushPending();
     handlePassReturn();
+    checkVersion();
   });
 }
 

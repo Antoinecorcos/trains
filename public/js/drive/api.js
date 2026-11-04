@@ -18,7 +18,9 @@ export const api = {
       const timer = setTimeout(() => ctrl.abort(), 3500);
       const r = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
       clearTimeout(timer);
-      this.online = r.ok && (await r.json()).ok === true;
+      const h = r.ok ? await r.json() : {};
+      this.online = h.ok === true;
+      this.serverVersion = h.version ?? null;
     } catch {
       this.online = false;
     }
