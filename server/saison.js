@@ -149,11 +149,17 @@ async function stripe(env, path, form) {
       headers: { authorization: `Bearer ${env.STRIPE_SECRET}`, ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {}) },
       body: form ? new URLSearchParams(form).toString() : undefined,
     });
-  } catch {
+  } catch (e) {
+    console.error('Stripe injoignable', path, String(e));
     throw err(502, 'Stripe injoignable pour l\'instant, réessaie dans un instant.');
   }
-  const data = await r.json();
-  if (!r.ok) throw err(502, `Paiement indisponible : ${data.error?.message ?? r.status}`);
+  let data = {};
+  try { data = await r.json(); } catch { /* réponse vide */ }
+  if (!r.ok) {
+    // visible dans les journaux du Worker (Cloudflare → ukipu → Observabilité)
+    console.error('Stripe', path, r.status, JSON.stringify(data.error ?? data));
+    throw err(502, `Stripe a refusé (${r.status}) : ${data.error?.message ?? 'erreur inconnue'}`);
+  }
   return data;
 }
 
@@ -167,14 +173,22 @@ export async function checkout(env, user, b, origin) {
   }
   if (await hasPass(env, target.id, key)) throw err(400, target.id === user.id ? 'Tu as déjà le Pass ce mois-ci.' : `${target.pseudo} a déjà le Pass ce mois-ci.`);
   const label = target.id === user.id ? `Pass Navigo Ukipu · ${seasonName(key)}` : `Pass Navigo Ukipu · ${seasonName(key)} (offert à ${target.pseudo})`;
+  // Prix : soit un prix créé dans Stripe (STRIPE_PRICE = price_…, suffit d'une clé restreinte « Checkout Sessions »),
+  // soit un prix décrit à la volée (demande aussi le droit d'écriture sur les produits et les prix)
+  const item = env.STRIPE_PRICE
+    ? { 'line_items[0][price]': env.STRIPE_PRICE }
+    : {
+      'line_items[0][price_data][currency]': 'eur',
+      'line_items[0][price_data][unit_amount]': String(PASS_PRICE_CENTS),
+      'line_items[0][price_data][product_data][name]': label,
+    };
   const s = await stripe(env, 'checkout/sessions', {
     mode: 'payment',
     success_url: `${origin}/?pass=ok&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/?pass=annule`,
     'line_items[0][quantity]': '1',
-    'line_items[0][price_data][currency]': 'eur',
-    'line_items[0][price_data][unit_amount]': String(PASS_PRICE_CENTS),
-    'line_items[0][price_data][product_data][name]': label,
+    ...item,
+    'payment_intent_data[description]': label,
     client_reference_id: String(user.id),
     'metadata[buyer]': String(user.id),
     'metadata[target]': String(target.id),

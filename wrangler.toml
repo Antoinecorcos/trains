@@ -12,3 +12,7 @@ binding = "DB"
 database_name = "ukipu"
 # Base D1 « ukipu » du compte Cloudflare
 database_id = "98d26ab7-8dcc-4233-96b5-349922ed5d47"
+
+# Journaux du Worker visibles dans le tableau de bord (Workers & Pages → ukipu → Observabilité)
+[observability]
+enabled = true

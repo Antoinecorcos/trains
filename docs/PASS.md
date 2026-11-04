@@ -32,6 +32,18 @@ affiche « Paiement bientôt disponible ». Pour l'activer, il faut deux secrets
 Ça suffit pour vendre : au retour de la page de paiement, le jeu demande à Stripe si c'est payé
 et active le Pass.
 
+### Avec une clé restreinte (`rk_…`)
+
+Une clé restreinte est plus sûre, mais il faut lui donner les bons droits. Deux possibilités :
+
+- **Le plus simple** : donner à la clé l'écriture sur **Checkout Sessions**, **Produits** et **Prix**
+  (le jeu décrit le Pass à la volée à chaque achat).
+- **Le plus restreint** : créer une fois le produit dans Stripe (**Catalogue de produits → Ajouter un produit** :
+  « Pass Navigo Ukipu », paiement unique, 2,99 €), copier l'identifiant du prix (`price_…`) et l'ajouter
+  dans Cloudflare comme variable `STRIPE_PRICE`. La clé n'a alors besoin que de **Checkout Sessions : écriture**.
+
+Si un droit manque, le jeu affiche le message exact de Stripe après le clic sur « Prendre le Pass ».
+
 ## 3. Le webhook (recommandé)
 
 Il active le Pass même si le joueur ferme la page avant d'être revenu dans le jeu.

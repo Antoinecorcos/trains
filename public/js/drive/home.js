@@ -809,8 +809,12 @@ async function buyPass(gift) {
     if (!r.url) throw new Error('Stripe n\'a pas renvoyé de page de paiement.');
     location.assign(r.url);
   } catch (err) {
-    C.toast(`Paiement impossible : ${err.message}`);
     btns.forEach((b) => { b.disabled = false; b.textContent = b.dataset.label; });
+    // message qui reste à l'écran (et que l'on peut recopier) plutôt qu'un toast de deux secondes
+    const perm = /permission|rak_/i.test(err.message);
+    modal(`<h2 class="ui-title">Paiement impossible</h2>
+      <p class="pay-err">${esc(err.message)}</p>
+      ${perm ? '<p class="ui-sub">Ta clé Stripe restreinte (rk_…) n\'a pas toutes les permissions : ajoute celles nommées dans le message ci-dessus (Stripe → Développeurs → Clés API → ta clé → Modifier), puis réessaie.</p>' : `<p class="ui-sub">Code ${err.status ?? '?'}. Envoie ce message à Claude s'il se répète.</p>`}`);
   }
 }
 

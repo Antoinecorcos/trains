@@ -30,14 +30,18 @@ export const api = {
     return this.online;
   },
 
-  async call(path, { method = 'GET', body } = {}) {
+  async call(path, { method = 'GET', body, timeout = 0 } = {}) {
     const headers = { 'content-type': 'application/json' };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     let r;
+    const ctrl = timeout ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeout) : null;
     try {
-      r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+      r = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: 'no-store', signal: ctrl?.signal });
     } catch {
-      throw Object.assign(new Error('Serveur injoignable. Vérifie ta connexion.'), { status: 0 });
+      throw Object.assign(new Error(ctrl?.signal.aborted ? 'Le serveur ne répond pas (délai dépassé).' : 'Serveur injoignable. Vérifie ta connexion.'), { status: 0 });
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     let data = {};
     try { data = await r.json(); } catch { /* réponse vide */ }
@@ -109,6 +113,6 @@ export const api = {
   season: () => api.call('/api/season'),
   claimSeason: () => api.call('/api/season/claim', { method: 'POST' }),
   cosmetics: (b) => api.call('/api/cosmetics', { method: 'POST', body: b }),
-  passCheckout: (gift) => api.call('/api/pass/checkout', { method: 'POST', body: gift ? { gift } : {} }),
+  passCheckout: (gift) => api.call('/api/pass/checkout', { method: 'POST', body: gift ? { gift } : {}, timeout: 20000 }),
   passConfirm: (sessionId) => api.call('/api/pass/confirm', { method: 'POST', body: { session_id: sessionId } }),
 };
