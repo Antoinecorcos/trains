@@ -44,6 +44,18 @@ Une clé restreinte est plus sûre, mais il faut lui donner les bons droits. Deu
 
 Si un droit manque, le jeu affiche le message exact de Stripe après le clic sur « Prendre le Pass ».
 
+### Managed Payments (Stripe vendeur officiel)
+
+Sur les comptes récents, Stripe active **Managed Payments** par défaut : Stripe devient le vendeur
+officiel, encaisse et reverse la TVA à ta place (contre des frais en plus). Il exige alors un code
+fiscal sur le produit. Le jeu envoie `txcd_10000000` (services fournis par voie électronique).
+
+- Si Stripe refuse ce code, choisis-en un autre dans la liste de Stripe et mets-le dans la variable
+  Cloudflare `STRIPE_TAX_CODE`.
+- Pour rester toi-même le vendeur (pas de frais en plus, mais la TVA et les déclarations sont pour
+  toi), ajoute la variable `STRIPE_MANAGED_PAYMENTS` avec la valeur `false`, ou désactive Managed
+  Payments dans les réglages Stripe.
+
 ## 3. Le webhook (recommandé)
 
 Il active le Pass même si le joueur ferme la page avant d'être revenu dans le jeu.

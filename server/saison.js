@@ -175,20 +175,25 @@ export async function checkout(env, user, b, origin) {
   const label = target.id === user.id ? `Pass Navigo Ukipu · ${seasonName(key)}` : `Pass Navigo Ukipu · ${seasonName(key)} (offert à ${target.pseudo})`;
   // Prix : soit un prix créé dans Stripe (STRIPE_PRICE = price_…, suffit d'une clé restreinte « Checkout Sessions »),
   // soit un prix décrit à la volée (demande aussi le droit d'écriture sur les produits et les prix)
+  // Code fiscal du produit : exigé quand Stripe est le vendeur officiel (Managed Payments, il gère alors la TVA).
+  // Par défaut « services fournis par voie électronique » ; modifiable avec la variable STRIPE_TAX_CODE.
   const item = env.STRIPE_PRICE
     ? { 'line_items[0][price]': env.STRIPE_PRICE }
     : {
       'line_items[0][price_data][currency]': 'eur',
       'line_items[0][price_data][unit_amount]': String(PASS_PRICE_CENTS),
       'line_items[0][price_data][product_data][name]': label,
+      'line_items[0][price_data][product_data][tax_code]': env.STRIPE_TAX_CODE || 'txcd_10000000',
     };
+  // STRIPE_MANAGED_PAYMENTS=false : désactive Managed Payments pour ces paiements (tu restes le vendeur)
+  const managed = String(env.STRIPE_MANAGED_PAYMENTS ?? '').toLowerCase() === 'false' ? { 'managed_payments[enabled]': 'false' } : {};
   const s = await stripe(env, 'checkout/sessions', {
     mode: 'payment',
     success_url: `${origin}/?pass=ok&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/?pass=annule`,
     'line_items[0][quantity]': '1',
     ...item,
-    'payment_intent_data[description]': label,
+    ...managed,
     client_reference_id: String(user.id),
     'metadata[buyer]': String(user.id),
     'metadata[target]': String(target.id),
