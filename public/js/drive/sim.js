@@ -36,6 +36,11 @@ export function createRun(mission, opts = {}) {
     signals: m.signals.map((s) => ({ ...s, state: 'red', timer: null })),
     animals: m.animals.map((a) => ({ ...a, state: 'track', waited: 0, fleeT: 0 })),
     works: m.works.map((w) => ({ ...w, warned: false, missed: false })),
+    alarms: m.alarms.map((a) => ({ ...a, state: 'idle', until: 0 })),
+    crossings: m.crossings.map((c) => ({ ...c, done: false })),
+    lives: mission.lives ?? null, // mode survie : la partie s'arrête à 0
+    failed: false,
+    announced: new Set(),
     passed: new Set(),
     passI: 0, // prochaine gare traversée sans arrêt (triées dans le sens de marche)
     doors: null,
@@ -114,7 +119,19 @@ export function nearPlatform(r) {
   return d < s.plat + 60 && d > -10;
 }
 // Ce que voudrait un bon conducteur : pleins phares dans le noir, sauf à quai
-export const lightsWanted = (r) => darkAt(r, r.x) && !nearPlatform(r) && r.phase === 'run';
+// Train qui arrive en face dans moins de 220 m (ou qui vient de passer)
+export function crossingNear(r) {
+  for (const c of r.crossings) if (!c.done && c.x - r.x < 220 && c.x - r.x > -20) return c;
+  return null;
+}
+export const lightsWanted = (r) => darkAt(r, r.x) && !nearPlatform(r) && !crossingNear(r) && r.phase === 'run';
+
+// Prochain arrêt réellement desservi (une gare évacuée se traverse sans s'arrêter)
+export function nextServed(r) {
+  for (let i = r.stopI; i < r.m.stops.length; i++) if (!r.m.stops[i].skip) return r.m.stops[i];
+  return null;
+}
+export const activeAlarm = (r) => r.alarms.find((a) => a.state === 'active' || a.state === 'stopped') ?? null;
 
 export const clockAt = (r) => r.m.clock[0] * 3600 + r.m.clock[1] * 60 + r.t;
 export const schedArr = (r, i) => (r.sched ? r.sched.arr[i] : null);
@@ -133,6 +150,18 @@ export function projectedGap(r) {
 // ---------------------------------------------------------------------------
 
 function emit(r, ev) { r.events.push(ev); }
+
+// Mode survie : une faute grave coûte une vie
+function loseLife(r, why) {
+  if (r.lives == null || r.failed) return;
+  r.lives--;
+  emit(r, { type: 'life', lives: r.lives, why });
+  if (r.lives <= 0) {
+    r.failed = true;
+    emit(r, { type: 'failed' });
+    endRun(r);
+  }
+}
 
 function add(r, part, pts, ev) {
   r.parts[part] += pts;
@@ -171,6 +200,7 @@ function drive(r, hornEdge, input = {}) {
     r.kvb = true;
     r.stats.kvb++;
     add(r, 'penalty', -300, { type: 'kvb', label: 'Survitesse : freinage d\'urgence' });
+    loseLife(r, 'Survitesse');
   }
   if (r.kvb && r.v <= limit - 5 / 3.6) r.kvb = false;
   const over = r.v > limit + 3 / 3.6;
@@ -181,8 +211,25 @@ function drive(r, hornEdge, input = {}) {
   }
   if (over !== r.overspeed) { r.overspeed = over; emit(r, { type: over ? 'overspeed' : 'overspeedEnd' }); }
 
-  // Départ verrouillé avant l'heure prévue
-  const locked = r.sched && r.t < r.depAt;
+  // Signal d'alarme : s'arrêter dans les 380 m, puis attendre la levée de doute
+  for (const al of r.alarms) {
+    if (al.state === 'idle' && r.x >= al.x) { al.state = 'active'; al.limit = al.x + 380; emit(r, { type: 'alarm' }); }
+    if (al.state === 'active') {
+      if (r.v === 0) {
+        al.state = 'stopped';
+        al.until = r.t + 8;
+        add(r, 'bonus', 100, { type: 'bonus', label: 'Arrêt sur signal d\'alarme' });
+      } else if (r.x > al.limit) {
+        al.state = 'missed';
+        add(r, 'penalty', -300, { type: 'penalty', label: 'Signal d\'alarme ignoré' });
+        loseLife(r, 'Signal d\'alarme ignoré');
+      }
+    }
+    if (al.state === 'stopped' && r.t >= al.until) { al.state = 'done'; emit(r, { type: 'alarmClear' }); }
+  }
+
+  // Départ verrouillé avant l'heure prévue (ou pendant la levée de doute d'un signal d'alarme)
+  const locked = (r.sched && r.t < r.depAt) || r.alarms.some((a) => a.state === 'stopped');
 
   let lever = r.lever;
   if (r.kvb || r.spadT > r.t) lever = -1;
@@ -215,7 +262,7 @@ function drive(r, hornEdge, input = {}) {
   // Phares : pleins phares dans le noir, code à l'approche des quais
   const dark = darkAt(r, r.x);
   const near = nearPlatform(r);
-  if (r.v > 3 && dark && !near && !r.lights) {
+  if (r.v > 3 && dark && !near && !r.lights && !crossingNear(r)) {
     r.darkT += DT;
     if (r.darkT > 2.5) {
       r.stats.darkT += DT;
@@ -236,6 +283,17 @@ function drive(r, hornEdge, input = {}) {
     }
   }
 
+  // Croisements : de nuit on passe en code, de jour un petit coup de klaxon pour saluer le collègue
+  for (const c of r.crossings) {
+    if (c.done || r.x < c.x) continue;
+    c.done = true;
+    const dk = darkAt(r, r.x);
+    if (dk && r.lights) add(r, 'penalty', -80, { type: 'penalty', label: 'Conducteur d\'en face ébloui' });
+    else if (dk) add(r, 'bonus', 40, { type: 'crossing', label: 'Croisement en code' });
+    else if (r.t - r.hornT < 4) add(r, 'bonus', 30, { type: 'crossing', label: 'Salut au collègue' });
+    else emit(r, { type: 'crossing', label: null });
+  }
+
   // Signaux
   for (const s of r.signals) {
     if (s.state === 'red' && s.timer == null && s.x - r.x < 380) s.timer = r.t + s.hold;
@@ -248,6 +306,7 @@ function drive(r, hornEdge, input = {}) {
       r.spadT = r.t + 4;
       s.state = 'green';
       add(r, 'penalty', -800, { type: 'spad', label: 'Franchissement de signal fermé' });
+      loseLife(r, 'Signal franchi');
     }
   }
 
@@ -266,6 +325,7 @@ function drive(r, hornEdge, input = {}) {
       r.spadT = r.t + 2.5;
       r.comfort -= 12;
       add(r, 'penalty', -400, { type: 'hit', label: 'Heurt d\'animal' });
+      loseLife(r, 'Heurt');
     } else if (r.v === 0 && d > 0 && d < 80) {
       an.waited += DT;
       if (an.waited > 2.5) { an.state = 'fled'; an.fleeT = r.t; emit(r, { type: 'gone' }); }
@@ -305,6 +365,22 @@ function drive(r, hornEdge, input = {}) {
   const s = nextStop(r);
   if (!s) return;
   const d = r.x - s.x;
+  if (s.skip) {
+    // colis suspect : gare évacuée, on la traverse sans ouvrir
+    if (!r.announced.has(`skip${r.stopI}`) && d > -750) { r.announced.add(`skip${r.stopI}`); emit(r, { type: 'evacuated', name: s.name }); }
+    if (r.v === 0 && input.door && d > -s.plat && d < 10 && !r.announced.has(`skipdoor${r.stopI}`)) {
+      r.announced.add(`skipdoor${r.stopI}`);
+      add(r, 'penalty', -200, { type: 'penalty', label: 'Gare évacuée : ouverture interdite' });
+    }
+    if (d > 2) {
+      add(r, 'bonus', 100, { type: 'bonus', label: `${s.name} évacuée : passage sans arrêt` });
+      r.grades.push({ k: s.k, name: s.name, grade: 'passe', d: null, gap: null });
+      r.arrivals.push(r.t);
+      r.stopI++;
+      if (r.stopI >= r.m.stops.length) endRun(r);
+    }
+    return;
+  }
   if (r.v === 0 && r.lever <= 0) {
     if (d > STOP_WINDOW[1] && d <= MISSED_AFTER) {
       emit(r, { type: 'reverse', label: 'Arrêt dépassé : recul jusqu\'au repère' });
@@ -330,6 +406,7 @@ function drive(r, hornEdge, input = {}) {
     r.grades.push({ k: s.k, name: s.name, grade: 'rate', d: null, gap: null });
     add(r, 'penalty', -600, { type: 'missed', label: `Gare brûlée : ${s.name}` });
     r.stopI++;
+    loseLife(r, 'Gare brûlée');
     if (r.stopI >= r.m.stops.length) endRun(r);
   }
 }
@@ -347,6 +424,7 @@ function arrive(r, s, d) {
   r.bestCombo = Math.max(r.bestCombo, r.combo);
   const mult = r.combo >= 2 ? 1 + 0.25 * Math.min(r.combo - 1, 6) : 1;
   add(r, 'precision', Math.round(g.pts * mult), { type: 'grade', grade: g.id, label: g.label, d, combo: r.combo, mult });
+  if (g.id === 'loin' || g.id === 'rate') loseLife(r, 'Arrêt raté');
 
   let gap = null;
   if (r.sched) {
@@ -370,9 +448,13 @@ function arrive(r, s, d) {
   r.doors = {
     state: 'opening', t: r.t, pax: s.pax, boarded: 0, fullAt: null, last, shortUM,
     runner: s.runner ? { state: 'waiting', appearAt: null, arriveAt: null } : null,
+    malaise: s.malaise && !last ? s.malaise : 0, // secondes d'attente des secours
+    openAt: r.t,
   };
+  if (r.failed) return; // la partie vient de s'arrêter (plus de vie)
   r.phase = 'doors';
   emit(r, { type: 'doorsOpen', last });
+  if (r.doors.malaise) emit(r, { type: 'malaise', hold: r.doors.malaise });
 }
 
 function updateDoors(r, input) {
@@ -406,7 +488,7 @@ function updateDoors(r, input) {
     }
     if ((input.door || input.close) && !dr.last) closeDoors(r);
   }
-  if (dr.state === 'closing' && r.t - dr.t > 0.8) {
+  if (dr.state === 'closing' && r.t - dr.t > 0.8 && !r.failed) {
     dr.state = 'closed';
     r.phase = 'run';
     r.stopI++;
@@ -420,11 +502,17 @@ function closeDoors(r) {
   const left = dr.pax - dr.boarded;
   let pts;
   let label;
+  if (dr.malaise) {
+    if (r.t - dr.openAt < dr.malaise) {
+      add(r, 'penalty', -200, { type: 'penalty', label: 'Départ avant l\'arrivée des secours' });
+      loseLife(r, 'Malaise voyageur');
+    } else add(r, 'bonus', 80, { type: 'bonus', label: 'Voyageur pris en charge' });
+  }
   if (dr.runner && dr.runner.state === 'running') {
     dr.runner.state = 'missed';
     add(r, 'penalty', -50, { type: 'penalty', label: 'Porte claquée au nez du retardataire' });
   }
-  if (left > 0.5) { pts = -100 - Math.round(left * 4); label = `${Math.ceil(left)} voyageurs restés à quai`; }
+  if (left > 0.5) { pts = -100 - Math.round(left * 4); label = `${Math.ceil(left)} voyageurs restés à quai`; if (left > 5) loseLife(r, 'Voyageurs à quai'); }
   else {
     const wait = r.t - dr.fullAt;
     if (wait <= 1) { pts = 150; label = 'Portes pile'; }
@@ -460,7 +548,7 @@ export function result(r) {
   const n = r.m.stops.length;
   // Score de référence : arrêts parfaits enchaînés (combo compris), ponctualité et portes parfaites
   let ref = 300 + 100 * (r.m.animals.length + r.m.works.length);
-  for (let i = 0; i < n; i++) ref += 500 * (i >= 1 ? 1 + 0.25 * Math.min(i, 6) : 1) + 300 + (i < n - 1 ? 150 : 0);
+  for (let i = 0; i < n; i++) ref += r.m.stops[i].skip ? 100 : 500 * (i >= 1 ? 1 + 0.25 * Math.min(i, 6) : 1) + 300 + (i < n - 1 ? 150 : 0);
   const score = Math.round(r.score);
   const stars = 1 + (score >= ref * STAR2 ? 1 : 0) + (score >= ref * STAR3 ? 1 : 0);
   return {
@@ -471,6 +559,9 @@ export function result(r) {
     bestCombo: r.bestCombo,
     grades: r.grades,
     stats: { ...r.stats },
+    lives: r.lives,
+    failed: r.failed,
+    stopsDone: r.grades.length,
   };
 }
 
@@ -484,12 +575,15 @@ export function aiInput(r) {
   if (r.phase === 'doors') {
     const dr = r.doors;
     const runnerPending = dr.runner && dr.runner.state !== 'boarded' && dr.runner.state !== 'missed';
-    input.door = dr.state === 'open' && dr.fullAt != null && !runnerPending && r.t - dr.fullAt > 0.4;
+    const help = dr.malaise && r.t - dr.openAt < dr.malaise + 0.3;
+    input.door = dr.state === 'open' && dr.fullAt != null && !runnerPending && !help && r.t - dr.fullAt > 0.4;
     return input;
   }
-  if (r.waitDoors != null && r.t - r.waitDoors > 0.3) { input.door = true; input.lever = -0.4; return input; }
+  if (r.waitDoors != null && r.t - r.waitDoors > 0.3 && !nextStop(r)?.skip) { input.door = true; input.lever = -0.4; return input; }
   const b = Math.min(1.1, 1.6 * adhesionAt(r, r.x) * 0.6);
-  const s = nextStop(r);
+  const s = nextServed(r);
+  const cr = crossingNear(r);
+  if (cr && !darkAt(r, r.x) && cr.x - r.x < 150 && r.t - r.hornT > 5) input.horn = true;
   let vt = limitAt(r, r.x) / 3.6 - 0.6;
   for (const z of r.m.limits) {
     const d = z.from - r.x;
@@ -501,6 +595,8 @@ export function aiInput(r) {
     const d = sg.x - r.x - 10;
     if (sg.state === 'red' && d > -10) stopD = Math.min(stopD, d);
   }
+  const al = activeAlarm(r);
+  if (al) stopD = Math.min(stopD, al.state === 'stopped' ? 0 : al.x + 200 - r.x);
   for (const an of r.animals) {
     const d = an.x - r.x;
     if (an.state === 'track' && d < 200 && d > 30 && r.t - r.hornT > 1) input.horn = true;
@@ -520,7 +616,7 @@ export function aiInput(r) {
 export function computeSchedule(mission) {
   const r = createRun(mission);
   let guard = 0;
-  while (!r.over && guard++ < 60 * 900) {
+  while (!r.over && guard++ < 60 * 2400) {
     step(r, aiInput(r));
     r.events.length = 0;
   }

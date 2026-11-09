@@ -1,5 +1,5 @@
 // Teste l'API locale (npx wrangler dev) : inscription, parties vérifiées, classement, fantôme, fil d'actu.
-import { missionById, weeklyMission } from '../public/js/drive/route.js';
+import { missionById, weeklyMission, rushMission } from '../public/js/drive/route.js';
 import { withSabotage } from '../public/js/drive/reseau.js';
 import { createRun, step, aiInput, computeSchedule, newLog, record } from '../public/js/drive/sim.js';
 
@@ -176,3 +176,9 @@ prof = await call('/api/profile', {}, tok);
 if (prof.data.boxes.navigo) { const o = await call('/api/box/open', { method: 'POST', body: JSON.stringify({ kind: 'navigo' }) }, tok); console.log('Colis Navigo', o.status, o.data.items ?? o.data.error); }
 const buyNav = await call('/api/box/buy', { method: 'POST', body: JSON.stringify({ kind: 'navigo' }) }, tok);
 console.log('acheter un Colis Navigo', buyNav.status, buyNav.data.error);
+
+// Heure de pointe (survie)
+const rm = rushMission();
+const rp2 = play(rm.id);
+const rr = await call('/api/runs', { method: 'POST', body: JSON.stringify({ mission: rm.id, log: rp2.log }) }, tok);
+console.log('heure de pointe', rr.status, 'client', rp2.score, 'server', rr.data.score, rr.data.error ?? '', rr.data.season?.gained);

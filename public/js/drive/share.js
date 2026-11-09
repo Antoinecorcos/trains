@@ -6,7 +6,7 @@ const W = 1080;
 const H = 1350;
 const FONT = '"Nunito Sans", "Avenir Next", Avenir, "Segoe UI", sans-serif';
 const LED = '"Doto", "Courier New", monospace';
-const SQUARE = { parfait: '#ffd200', super: '#24b47e', bien: '#2f6ff2', ok: '#c3cbff', loin: '#8e98d8', rate: '#e33b45' };
+const SQUARE = { parfait: '#ffd200', super: '#24b47e', bien: '#2f6ff2', ok: '#c3cbff', loin: '#8e98d8', rate: '#e33b45', passe: '#9b6cff' };
 
 function rr(ctx, x, y, w, h, r) {
   ctx.beginPath();

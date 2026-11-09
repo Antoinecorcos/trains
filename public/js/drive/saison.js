@@ -25,7 +25,7 @@ export const daysLeft = (key, now = Date.now()) => Math.max(0, Math.ceil((season
 
 // Points de saison d'un service
 export function xpFor(mission, res) {
-  return 10 + 5 * res.stars + (mission.daily || mission.weekly ? 15 : 0);
+  return 10 + 5 * res.stars + (mission.daily || mission.weekly || mission.rush ? 15 : 0);
 }
 export const tierOf = (xp) => Math.min(TIERS, Math.floor(xp / XP_PER_TIER));
 

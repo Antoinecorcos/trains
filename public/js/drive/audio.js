@@ -109,6 +109,21 @@ export class Audio {
     if (this.hornOsc) this.hornOsc.forEach((o, i) => o.frequency.setValueAtTime(this.hornNotes[i], this.ctx.currentTime));
   }
 
+  // Annonces en gare : voix de synthèse du téléphone (française si disponible), coupées avec le son
+  say(text) {
+    if (this.muted || !('speechSynthesis' in window)) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'fr-FR';
+      u.rate = 1.02;
+      u.volume = 0.9;
+      const v = window.speechSynthesis.getVoices().find((x) => x.lang?.startsWith('fr'));
+      if (v) u.voice = v;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch { /* synthèse vocale indisponible */ }
+  }
+
   hornPreview(notes) {
     for (const f of notes ?? [311, 370]) this.tone(f, 0.5, 'sawtooth', 0.05);
   }

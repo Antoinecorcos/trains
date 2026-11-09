@@ -285,11 +285,11 @@ function checkMission(id) {
     const ok = [-1, 0, 1].some((d) => dailyKey(new Date(now.getTime() + d * 86400000)) === key);
     if (!ok) throw new HttpError(400, 'Ce défi du jour est terminé.');
   }
-  if (m.weekly) {
-    const key = Number(m.id.slice(7));
+  if (m.weekly || m.rush) {
+    const key = Number(m.id.slice(m.rush ? 5 : 7));
     const now = new Date();
     const ok = [-1, 0, 1].some((d) => weekKey(new Date(now.getTime() + d * 86400000)) === key);
-    if (!ok) throw new HttpError(400, 'Ce défi hebdo est terminé.');
+    if (!ok) throw new HttpError(400, m.rush ? 'Cette heure de pointe est terminée.' : 'Ce défi hebdo est terminé.');
   }
   return m;
 }
@@ -318,7 +318,7 @@ async function submitRun(env, user, b) {
   }
   const livree = b.livree && LIVREES[b.livree] && (await ownsLivree(env, user.id, b.livree)) ? b.livree : 'origine';
   // Un sabotage en attente sur cette ligne s'applique au service (jamais aux défis à armes égales)
-  const sab = mission.daily || mission.weekly ? null : await pendingSabotage(env, user.id, mission.line);
+  const sab = mission.daily || mission.weekly || mission.rush ? null : await pendingSabotage(env, user.id, mission.line);
   const played = sab ? withSabotage(mission, { kind: sab.kind, by: sab.by }) : mission;
   const r = replay(played, sched, b.log, rame);
   if (!r.over) throw new HttpError(400, 'Partie incomplète : elle n\'a pas pu être vérifiée.');
@@ -382,7 +382,7 @@ async function submitRun(env, user, b) {
   const reward = { tickets: Math.round(runReward(res) * (fx.tickets ?? 1)), boxes: [] };
   if (res.stars === 3 && (!prev || prev.stars < 3)) reward.boxes.push('rare');
   if (crown && dethroned) reward.boxes.push('rare');
-  if (mission.daily || mission.weekly) {
+  if (mission.daily || mission.weekly || mission.rush) {
     const already = await env.DB.prepare('SELECT COUNT(*) AS n FROM runs WHERE user_id = ? AND mission = ?').bind(user.id, mission.id).first();
     if (already.n === 1) reward.boxes.push('standard');
   }

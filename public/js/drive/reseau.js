@@ -146,7 +146,7 @@ export const SABOTAGE_FOIL_STARS = 2; // 2 étoiles ou plus malgré le sabotage 
 
 // Applique un sabotage à une mission (même résultat côté client et côté serveur)
 export function withSabotage(m, sab) {
-  if (!sab || !SABOTAGES[sab.kind] || m.daily || m.weekly) return m;
+  if (!sab || !SABOTAGES[sab.kind] || m.daily || m.weekly || m.rush) return m;
   const dir = m.to >= m.from ? 1 : -1;
   const seq = m.stops ? [m.from, ...m.stops] : [];
   if (!m.stops) for (let k = m.from; ; k += dir) { seq.push(k); if (k === m.to) break; }

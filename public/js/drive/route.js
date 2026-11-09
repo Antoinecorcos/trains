@@ -319,6 +319,16 @@ export const MISSIONS = [
       h.passengers(8, 55); h.passengers(16, 25);
     },
   },
+  {
+    id: 'u-jeudi', line: 'U', title: 'Jeudi noir', from: 0, to: 6, clock: [8, 16], need: 8, weather: 'rain', light: 0.45, crowd: 1.3,
+    blurb: 'Tout ce qui peut arriver sur la U arrive ce matin : signal d\'alarme tiré, colis suspect à Saint-Cloud, malaise voyageur à Chaville. Garde ton calme.',
+    build: (h) => { h.alarm(1, 2, 0.4); h.parcel(3); h.cross(3, 4, 0.5); h.malaise(5); h.leaves(5, 6, 0.3, 0.8); h.runner(4); },
+  },
+  {
+    id: 'l4', line: 'L', title: 'Nuit blanche à Saint-Lazare', from: 0, to: 6, clock: [0, 18], need: 5, weather: 'clear', light: 0.05,
+    blurb: 'Dernier train de la nuit vers La Défense. Les trains de service croisent en sens inverse : pleins phares sur la voie, code pour ne pas éblouir les collègues.',
+    build: (h) => { h.cross(0, 1, 0.5); h.cross(1, 2, 0.6); h.cross(3, 4, 0.4); h.animal(4, 5, 0.5); h.cross(5, 6, 0.3); h.malaise(4, 10); },
+  },
   // ----- RER C -----
   {
     id: 'c1', line: 'C', title: 'Bord de Seine', from: 7, to: 13, clock: [8, 31], need: 0, weather: 'clear', light: 0.7,
@@ -386,6 +396,8 @@ export function missionById(id) {
   if (d) return dailyMission(null, Number(d[1]));
   const w = /^weekly-(\d{8})$/.exec(id);
   if (w) return weeklyMission(null, Number(w[1]));
+  const h = /^rush-(\d{8})$/.exec(id);
+  if (h) return rushMission(null, Number(h[1]));
   return null;
 }
 
@@ -469,6 +481,46 @@ export function weeklyMission(date = new Date(), forcedKey = null) {
   };
 }
 
+// Heure de pointe : mode survie de la semaine. 10 arrêts sur le RER A ou C, tous les incidents possibles,
+// 3 vies (gare brûlée, arrêt raté, signal franchi, sanglier percuté, voyageurs laissés à quai…).
+// Rame imposée : classement à armes égales.
+export const RUSH_STOPS = 10;
+export function rushMission(date = new Date(), forcedKey = null) {
+  const key = forcedKey ?? weekKey(date);
+  const rng = mulberry32(key * 17 + 3);
+  const line = LINES[(Math.floor(key / 7) + Math.floor(rng() * 2)) % 2 ? 'A' : 'C'];
+  const n = line.stations.length;
+  let from = Math.floor(rng() * (n - RUSH_STOPS));
+  let to = from + RUSH_STOPS;
+  if (rng() < 0.5) [from, to] = [to, from];
+  const evening = rng() < 0.5;
+  return {
+    id: `rush-${key}`, rush: true, line: line.id, title: 'Heure de pointe', from, to,
+    clock: evening ? [18, 4] : [7, 52], need: 0, weather: rng() < 0.3 ? 'rain' : 'clear', light: evening ? 0.22 : 0.5,
+    crowd: 1.5, compo: 'UM', lives: 3, fixedRame: line.rame,
+    blurb: `${line.name}, ${line.stations[from].name} → ${line.stations[to].name} en pleine heure de pointe : signaux d'alarme, gares évacuées, malaises, trains en face. Trois vies, dix arrêts. Jusqu'où iras-tu ?`,
+    build: (h) => {
+      const r = mulberry32(key * 29 + 11);
+      const dir = to > from ? 1 : -1;
+      const picks = ['signal', 'limit', 'leaves', 'animal', 'works', 'alarm', 'cross', 'cross', 'runner'];
+      let i = 0;
+      for (let st = from; st !== to; st += dir, i++) {
+        const p = picks[Math.floor(r() * picks.length)];
+        if (p === 'signal') h.signal(st, st + dir, 0.4 + r() * 0.4, 5 + Math.floor(r() * 5), 'Train devant');
+        if (p === 'limit') h.limit(st, st + dir, 0.2, 0.6, r() < 0.5 ? 60 : 80, 'Courbe');
+        if (p === 'leaves') h.leaves(st, st + dir, 0.2, 0.8);
+        if (p === 'animal') h.animal(st, st + dir, 0.3 + r() * 0.4);
+        if (p === 'works') h.works(st, st + dir, 0.3, 0.6);
+        if (p === 'alarm') h.alarm(st, st + dir, 0.25 + r() * 0.3);
+        if (p === 'cross') h.cross(st, st + dir, 0.3 + r() * 0.4);
+        if (p === 'runner') h.runner(st + dir);
+        const k = st + dir;
+        if (k !== to && i % 4 === 2) (r() < 0.5 ? h.parcel(k) : h.malaise(k));
+      }
+    },
+  };
+}
+
 // Tracé concret d'une mission : gares dans le sens de marche, positions en mètres de jeu
 export function buildRoute(m) {
   const line = lineOf(m);
@@ -514,7 +566,10 @@ export const inTunnel = (route, x) => route.tunnels.some((t) => x >= t.from && x
 export function buildMission(m) {
   const route = buildRoute(m);
   const at = (a, b, f) => Math.round(route.xOf(a) + (route.xOf(b) - route.xOf(a)) * f);
-  const course = { limits: [], signals: [], leaves: [], animals: [], works: [], runners: new Set(), passengers: {} };
+  const course = {
+    limits: [], signals: [], leaves: [], animals: [], works: [], runners: new Set(), passengers: {},
+    alarms: [], crossings: [], skips: new Set(), malaise: {},
+  };
   const h = {
     limit: (a, b, f0, f1, kmh, why) => {
       const p = at(a, b, f0);
@@ -537,6 +592,14 @@ export function buildMission(m) {
     },
     runner: (k) => course.runners.add(k),
     passengers: (k, n) => { course.passengers[k] = n; },
+    // signal d'alarme tiré par un voyageur : il faut s'arrêter dans les 380 m
+    alarm: (a, b, f) => course.alarms.push({ x: at(a, b, f) }),
+    // train qui croise en sens inverse : code la nuit, petit coup de klaxon le jour
+    cross: (a, b, f) => course.crossings.push({ x: at(a, b, f) }),
+    // colis suspect : la gare est évacuée, on la traverse sans s'arrêter
+    parcel: (k) => course.skips.add(k),
+    // malaise voyageur : portes ouvertes le temps que les secours arrivent
+    malaise: (k, hold = 14) => { course.malaise[k] = hold; },
   };
   m.build(h);
   const compo = compoOf(m);
@@ -548,6 +611,8 @@ export function buildMission(m) {
     pax: Math.round((course.passengers[k] ?? (k === m.to ? 12 : 26 + ((k * 37) % 30))) * (k === m.to ? 1 : crowd)),
     runner: course.runners.has(k),
     plat: at2(k).plat, short: at2(k).short,
+    skip: course.skips.has(k) && k !== m.to,
+    malaise: course.malaise[k] ?? 0,
   }));
   const passes = route.stations.slice(1).filter((s) => !stopIdx.includes(s.k)).map((s) => ({ k: s.k, name: s.name, x: s.x, plat: s.plat }));
   return {
@@ -564,5 +629,7 @@ export function buildMission(m) {
     passes,
     ...course,
     runners: undefined,
+    skips: undefined,
+    malaise: undefined,
   };
 }

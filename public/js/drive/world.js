@@ -84,6 +84,7 @@ export class World {
     this.drawCatenaryPoles(true);
     this.drawTunnels(run, now);
     this.drawPlatforms(run, now, 'back');
+    if (run.m.crossings?.length) this.drawOncoming(run);
     this.drawTrack(run);
     this.drawTrackside(run, now);
     for (const g of ghosts) this.drawTrain(g.x, g.v ?? 0, run, now, { ghost: true, label: g.label, look: this.look(g.rame, g.livree) });
@@ -95,6 +96,17 @@ export class World {
     this.drawWeather(run, rain, now);
     this.drawSparks(run);
     this.drawDark(run);
+    for (const gl of this.glows ?? []) {
+      const r0 = k * (gl.dark ? 16 : 5);
+      const g = ctx.createRadialGradient(gl.x, gl.y, 0, gl.x, gl.y, r0);
+      g.addColorStop(0, `rgba(255,244,200,${gl.dark ? 0.75 : 0.3})`);
+      g.addColorStop(1, 'rgba(255,244,200,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(gl.x, gl.y); ctx.arc(gl.x, gl.y, r0, Math.PI - 0.35, Math.PI + 0.35); ctx.fill();
+      ctx.fillStyle = '#fffbe6';
+      ctx.beginPath(); ctx.arc(gl.x + k * 0.15, gl.y, k * 0.22, 0, Math.PI * 2); ctx.fill();
+    }
+    this.glows = [];
     if (this.snow) { ctx.fillStyle = 'rgba(220,230,245,0.12)'; ctx.fillRect(0, 0, w, h); }
 
     // Teinte d'ambiance (aube, nuit)
@@ -509,6 +521,39 @@ export class World {
     }
   }
 
+  // Train qui croise en sens inverse, sur la voie d'en face (derrière la nôtre)
+  drawOncoming(run) {
+    const { ctx, k } = this;
+    const y = this.railY - k * 1.15;
+    // voie d'en face
+    ctx.fillStyle = 'rgba(60,64,72,0.55)';
+    ctx.fillRect(0, y - k * 0.12, this.w, k * 0.16);
+    const dark = this.light < 0.3 || inTunnel(this.route, run.x);
+    this.glows = [];
+    for (const c of run.m.crossings) {
+      if (run.x < c.x - 420 || run.x > c.x + 220) continue;
+      const nose = c.x - (run.x - c.x); // il vient à notre rencontre à la même vitesse : on se croise en c.x
+      const len = CAR * 4;
+      const x0 = this.X(nose);
+      const x1 = this.X(nose + len);
+      if (x1 < -10 || x0 > this.w + 10) continue;
+      const top = y - k * 3.7;
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = dark ? '#9aa0aa' : '#dfe3e8';
+      this.rr(x0, top, x1 - x0, k * 3.4, k * 0.5);
+      ctx.fillStyle = this.lineColor;
+      ctx.fillRect(x0, y - k * 1.5, x1 - x0, k * 0.28);
+      ctx.fillStyle = dark ? '#ffe6a6' : '#2b3446';
+      for (let wx = nose + 4; wx < nose + len - 2; wx += 2.6) ctx.fillRect(this.X(wx), top + k * 0.6, k * 1.4, k * 1.0);
+      ctx.fillStyle = '#1d2533';
+      ctx.fillRect(x0, top + k * 0.5, k * 1.2, k * 1.3);
+      ctx.restore();
+      // ses phares (en code) : dessinés après l'obscurité pour qu'on le voie arriver de loin
+      this.glows.push({ x: x0, y: y - k * 0.9, dark });
+    }
+  }
+
   drawTrack(run) {
     const { ctx, k } = this;
     const y = this.railY;
@@ -764,6 +809,32 @@ export class World {
       ctx.fillStyle = '#6c7177';
       ctx.fillRect(a, top + k * 1.4, b - a, k * 0.25);
       for (const wx of [st.x - st.plat + 14, st.x - st.plat * 0.5]) this.stationSign(this.X(wx), top - k * 3.1, st.name);
+      // colis suspect : quai fermé par de la rubalise
+      if (isStop && run.m.stops[stopIdx].skip) {
+        const tx0 = this.X(st.x - st.plat);
+        const tx1 = this.X(st.x);
+        const ty = top - k * 1.2;
+        ctx.save();
+        ctx.lineWidth = Math.max(2, k * 0.25);
+        ctx.setLineDash([k * 0.9, k * 0.9]);
+        ctx.strokeStyle = '#e33b45';
+        ctx.beginPath(); ctx.moveTo(tx0, ty); ctx.lineTo(tx1, ty); ctx.stroke();
+        ctx.lineDashOffset = k * 0.9;
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath(); ctx.moveTo(tx0, ty); ctx.lineTo(tx1, ty); ctx.stroke();
+        ctx.restore();
+        const sx = this.X(st.x - st.plat * 0.5) + k * 8;
+        if (sx > -60 && sx < this.w + 60) {
+          ctx.fillStyle = '#e33b45';
+          this.rr(sx, top - k * 4.6, k * 6.2, k * 1.4, k * 0.2);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `900 ${Math.max(9, k * 0.95)}px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('GARE FERMÉE', sx + k * 3.1, top - k * 3.9);
+          ctx.textBaseline = 'alphabetic';
+        }
+      }
       const mx = this.X(st.x);
       if (isStop) {
         ctx.fillStyle = '#2b2f36';

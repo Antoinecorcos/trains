@@ -1,11 +1,11 @@
 // Ukipu — mode conduite : écrans, pupitre, boucle de jeu.
-import { MISSIONS, dailyMission, weeklyMission, lineOf, buildRoute } from './route.js';
+import { MISSIONS, dailyMission, weeklyMission, rushMission, lineOf, buildRoute } from './route.js';
 import { SABOTAGES } from './reseau.js';
 import { runCard, shareCanvas } from './share.js';
 import { THEMES, TIERS } from './saison.js';
 import { VERSION } from './version.js';
 import {
-  DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform,
+  DT, createRun, step, computeSchedule, aiInput, newLog, record, limitAt, nextLimit, nextStop, nextSignal, clockAt, projectedGap, adhesionAt, lightsWanted, nearPlatform, crossingNear, activeAlarm, darkAt,
 } from './sim.js';
 import { World } from './world.js';
 import { Audio } from './audio.js';
@@ -29,7 +29,8 @@ let run = null;
 let mission = null;
 let sched = null;
 let ghost = null;
-let ghostBehind = false; // le fantôme était derrière le joueur (pour déclencher son emote)
+let ghostBehind = false;
+let saidNext = -1; // dernière annonce « prochain arrêt » (index de l'arrêt) // le fantôme était derrière le joueur (pour déclencher son emote)
 let running = false;
 let paused = false;
 let acc = 0;
@@ -47,7 +48,7 @@ let runGear = null;
 const schedCache = {};
 const tips = store.get('ukipu.drive.tips', {});
 
-const allMissions = () => [...MISSIONS, dailyMission(), weeklyMission()];
+const allMissions = () => [...MISSIONS, dailyMission(), weeklyMission(), rushMission()];
 const progKey = () => (api.loggedIn ? `ukipu.drive.progress.u.${api.user.pseudo.toLowerCase()}` : 'ukipu.drive.progress.v2');
 const ghostKey = (id) => (api.loggedIn ? `ukipu.drive.ghost.u.${api.user.pseudo.toLowerCase()}.${id}` : `ukipu.drive.ghost.v2.${id}`);
 const progress = () => store.get(progKey(), {});
@@ -167,6 +168,7 @@ async function startMission(m) {
   sched = schedCache[m.id];
   ghost = await loadGhost(m);
   ghostBehind = false;
+  saidNext = -1;
   world.emote = null;
   starting = false;
   const g = gear(m);
@@ -342,6 +344,7 @@ function handleEvents() {
         break;
       case 'doorsOpen':
         audio.chime();
+        { const st = run.m.stops[run.stopI]; if (st) setTimeout(() => audio.say(ev.last ? `${st.name}. Terminus. Tout le monde descend.` : st.name), 500); }
         if (!ev.last) tip('doors', 'Les voyageurs montent. Ferme les portes (même bouton, ou Entrée) dès que la barre est pleine.');
         break;
       case 'shortPlatform':
@@ -356,6 +359,7 @@ function handleEvents() {
         break;
       case 'doorsClosing':
         audio.doorBeep();
+        audio.say('Attention à la fermeture des portes.');
         break;
       case 'boarded':
         audio.click();
@@ -371,6 +375,36 @@ function handleEvents() {
         break;
       case 'tip':
         if (ev.id === 'creep') toast('Trop court : avance doucement jusqu\'au repère');
+        break;
+      case 'alarm':
+        audio.alarm();
+        world.shake = 6;
+        tip('alarm', 'Un voyageur a tiré le signal d\'alarme : arrête-toi dans les 380 m, puis attends la levée de doute.');
+        break;
+      case 'alarmClear':
+        toast('Levée de doute terminée : tu peux repartir');
+        audio.chime();
+        break;
+      case 'evacuated':
+        toast(`Colis suspect : ${ev.name} est évacuée. Traverse-la sans t'arrêter.`);
+        audio.alarm();
+        audio.say(`Information voyageurs. En raison d'un colis suspect, la gare de ${ev.name} n'est pas desservie.`);
+        break;
+      case 'malaise':
+        toast(`Malaise voyageur : garde les portes ouvertes le temps que les secours arrivent (${ev.hold} s).`);
+        audio.say('Suite à un malaise voyageur, le train va rester à quai quelques instants.');
+        break;
+      case 'crossing':
+        if (ev.label) pop(ev.label, ev.pts > 0 ? `+${ev.pts}` : '', 'super small');
+        audio.whoosh();
+        break;
+      case 'life':
+        pop(`−1 vie · ${ev.why}`, ev.lives > 0 ? `${ev.lives} restante${ev.lives > 1 ? 's' : ''}` : 'service interrompu', 'rate');
+        world.shake = 12;
+        audio.bad();
+        break;
+      case 'failed':
+        audio.alarm();
         break;
       case 'terminus':
         audio.chime();
@@ -422,6 +456,9 @@ function bumpCombo() {
 function updateHud() {
   const r = run;
   $('score').textContent = fr0.format(Math.max(0, Math.round(r.score)));
+  const lv = $('lives');
+  lv.hidden = r.lives == null;
+  if (r.lives != null) lv.textContent = '❤️'.repeat(Math.max(0, r.lives)) + '🖤'.repeat(Math.max(0, (r.m.lives ?? 3) - r.lives));
   const cb = $('combo');
   cb.hidden = r.combo < 2;
   cb.textContent = `COMBO ×${r.combo}`;
@@ -497,13 +534,30 @@ function updateHud() {
       if (r.x > w.from - 220) alert = alert ?? { cls: 'warn', text: 'Agents sur la voie · KLAXON !' };
     }
   }
+  const alm = activeAlarm(r);
+  if (alm && alm.state === 'active') alert = { cls: 'red', text: `🚨 Signal d'alarme · arrête-toi (${fr0.format(Math.max(0, alm.limit - r.x))} m)` };
+  else if (alm && alm.state === 'stopped') alert = { cls: 'warn', text: `Levée de doute en cours · ${Math.ceil(alm.until - r.t)} s` };
+  const cr = crossingNear(r);
+  if (cr && r.phase === 'run') {
+    const dark = darkAt(r, r.x);
+    chips.unshift(`<span class="chip ${dark && r.lights ? 'red' : 'info'}">Train en face ${fr0.format(Math.max(0, cr.x - r.x))} m · ${dark ? 'passe en code (L)' : 'klaxon pour saluer'}</span>`);
+  }
+  const ns = nextStop(r);
+  if (ns && !ns.skip && r.phase === 'run' && ns.x - r.x < 650 && ns.x - r.x > 0 && saidNext !== r.stopI) {
+    saidNext = r.stopI;
+    audio.say(r.stopI === r.m.stops.length - 1 ? `Prochain arrêt : ${ns.name}. Terminus du train.` : `Prochain arrêt : ${ns.name}.`);
+  }
+  if (ns?.skip && ns.x - r.x < 900 && r.phase === 'run') {
+    chips.unshift(`<span class="chip red">${esc(ns.name)} évacuée · ne t'arrête pas</span>`);
+    if (ns.x - r.x < 400) alert = alert ?? { cls: 'red', text: `Colis suspect · gare évacuée · passage sans arrêt` };
+  }
   const adh = adhesionAt(r, r.x);
   if (adh < 0.5) chips.push('<span class="chip warn">Feuilles mortes · adhérence faible</span>');
   else if (r.m.weather === 'snow') chips.push('<span class="chip info">Neige · freinez tôt</span>');
   else if (adh < 1) chips.push('<span class="chip info">Rails mouillés</span>');
   if (r.kvb) alert = { cls: 'red', text: 'KVB · freinage d\'urgence' };
   else if (r.overspeed) alert = { cls: 'red', text: `Survitesse · limite ${lim}` };
-  if (r.lightsWarn) chips.unshift('<span class="chip red">Il fait noir · allume les phares (L)</span>');
+  if (r.lightsWarn && !crossingNear(r)) chips.unshift('<span class="chip red">Il fait noir · allume les phares (L)</span>');
   else if (r.lights && nearPlatform(r) && r.phase === 'run') chips.unshift('<span class="chip warn">Entrée en gare · passe en code (L)</span>');
   if (r.sched && r.phase === 'run' && r.t < r.depAt) chips.push('<span class="chip info">Départ verrouillé</span>');
   $('chips').innerHTML = chips.slice(0, 3).join('');
@@ -538,7 +592,9 @@ function updateHud() {
     db.disabled = dr.state !== 'open';
     db.classList.toggle('ready', dr.state === 'open' && full);
     db.classList.toggle('boarding', dr.state === 'open' && !full);
-    $('doors-lbl').textContent = dr.state === 'opening' ? 'Ouverture…' : dr.state === 'closing' ? 'Fermeture…' : 'Fermer les portes';
+    const help = dr.malaise ? Math.ceil(dr.malaise - (r.t - dr.openAt)) : 0;
+    $('doors-lbl').textContent = dr.state === 'opening' ? 'Ouverture…' : dr.state === 'closing' ? 'Fermeture…' : help > 0 ? `Secours en route · ${help} s` : 'Fermer les portes';
+    if (help > 0) db.classList.remove('ready');
     $('doors-fill').style.width = `${(dr.boarded / dr.pax) * 100}%`;
   } else {
     db.disabled = true;
@@ -749,8 +805,8 @@ function showEnd() {
   store.set(progKey(), prog);
 
   const pseudo = api.user?.pseudo || store.get('ukipu.pseudo', '') || 'Un conducteur';
-  const title = res.stars === 3 ? 'Conduite de maître' : res.stars === 2 ? 'Belle conduite' : 'Arrivé à bon port';
-  const gradeLbl = { parfait: 'PARFAIT', super: 'SUPER', bien: 'BIEN', ok: 'OK', loin: 'LOIN', rate: 'RATÉ' };
+  const title = res.failed ? `Service interrompu · ${res.stopsDone} arrêt${res.stopsDone > 1 ? 's' : ''}` : res.lives != null ? `Survivant · ${res.lives} vie${res.lives > 1 ? 's' : ''} restante${res.lives > 1 ? 's' : ''}` : res.stars === 3 ? 'Conduite de maître' : res.stars === 2 ? 'Belle conduite' : 'Arrivé à bon port';
+  const gradeLbl = { parfait: 'PARFAIT', super: 'SUPER', bien: 'BIEN', ok: 'OK', loin: 'LOIN', rate: 'RATÉ', passe: 'SANS ARRÊT' };
   const line = (k, v) => `<div class="tk-line"><span>${k}</span><span class="dots"></span><b>${v}</b></div>`;
   const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const vsPrev = prev ? `${res.score >= prev.score ? '+' : ''}${fr0.format(res.score - prev.score)} pts vs record` : 'Premier record';

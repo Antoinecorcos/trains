@@ -8,6 +8,13 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.5 — incidents et heure de pointe
+
+- **Nouveaux incidents** : signal d'alarme tiré (s'arrêter dans les 380 m, attendre la levée de doute), colis suspect (gare évacuée à traverser sans s'arrêter), malaise voyageur (portes ouvertes jusqu'à l'arrivée des secours), trains qui croisent en sens inverse (code la nuit, coup de klaxon pour saluer le collègue le jour).
+- **Heure de pointe** : mode survie de la semaine, 10 arrêts sur le RER A ou C, tous les incidents, 3 vies (gare brûlée, arrêt raté, signal franchi, sanglier, voyageurs laissés à quai…), rame imposée et classement.
+- **Annonces sonores** : « Prochain arrêt… », nom de la gare à l'ouverture, « Attention à la fermeture des portes » (voix du téléphone).
+- 2 nouvelles missions : « Jeudi noir » (U) et « Nuit blanche à Saint-Lazare » (L).
+
 ## V2.4 — saison mensuelle et Pass Navigo
 
 - **Onglet Saison** : chaque service rapporte des points (+10, +5 par étoile, +15 pour les défis). 20 paliers par mois, piste gratuite pour tous.

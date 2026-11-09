@@ -1,7 +1,7 @@
 // Accueil : carte du réseau, départs par ligne, dépôt (collection, colis), classement, fiche mission.
 import {
   MISSIONS, LINES, LINE_UNLOCK, RAMES, LIVREES, RARITIES, BOX_SHOP, BOX_INFO, MAX_LEVEL, levelCost,
-  dailyMission, weeklyMission, dailyKey, lineOf, buildRoute, compoOf,
+  dailyMission, weeklyMission, rushMission, dailyKey, lineOf, buildRoute, compoOf,
 } from './route.js';
 import {
   RENOV, MAX_STATION, STATIONS, ROLES, SABOTAGES, CHANTIER_SLOTS, staffPower, staffText, withSabotage, SABOTAGE_FOIL_STARS,
@@ -34,7 +34,7 @@ export function lineOpen(id) {
   const u = LINE_UNLOCK[id];
   return !u || starsOn(u.line) >= u.stars || starsOn(id) > 0;
 }
-export const missionOpen = (m) => m.daily || m.weekly || (lineOpen(m.line) && starsOn(m.line) >= m.need);
+export const missionOpen = (m) => m.daily || m.weekly || m.rush || (lineOpen(m.line) && starsOn(m.line) >= m.need);
 const totalStars = () => Object.keys(LINES).reduce((s, id) => s + starsOn(id), 0);
 
 // Rame et livrée utilisées pour une mission
@@ -163,7 +163,7 @@ async function onHomeClick(e) {
   const a = t.dataset.act;
   if (a === 'line') { state.line = t.dataset.id; showHome('departs'); }
   else if (a === 'mission') {
-    const m = [...MISSIONS, dailyMission(), weeklyMission()].find((x) => x.id === t.dataset.id);
+    const m = [...MISSIONS, dailyMission(), weeklyMission(), rushMission()].find((x) => x.id === t.dataset.id);
     if (m && missionOpen(m)) showBrief(m);
     else C.toast(m && !lineOpen(m.line) ? 'Débloque d\'abord cette ligne' : 'Gagne plus d\'étoiles sur cette ligne pour débloquer la mission');
   } else if (a === 'locked') C.toast(t.dataset.why);
@@ -444,11 +444,13 @@ function challengeCard(m, tag, cls, extra = '') {
     <button class="daily-card ${m.weekly ? 'weekly ' : ''}${cls}" type="button" data-act="mission" data-id="${m.id}" style="--lc:${l.color}">
       <span class="dc-tag">${tag}</span>
       ${pict(l.id, 'pict-md')}
-      <span class="dc-mid"><b>${cls === 'compact' ? '' : `${l.name} · `}${esc(l.stations[m.from].name)} › ${esc(l.stations[m.to].name)}</b><small>${n} arrêts · ${wx}${cls === 'compact' ? '' : ` · Z 2N imposée${extra}`}</small></span>
+      <span class="dc-mid"><b>${cls === 'compact' ? '' : `${l.name} · `}${esc(l.stations[m.from].name)} › ${esc(l.stations[m.to].name)}</b><small>${n} arrêts · ${wx}${cls === 'compact' ? '' : ` · ${RAMES[m.fixedRame]?.name ?? 'Z 2N'} imposée${extra}`}</small></span>
       <span class="dc-end">${res}</span>
     </button>`;
 }
 const dailyCard = (cls = '') => challengeCard(dailyMission(), 'Défi du jour', cls, ' · même parcours pour tous');
+// Heure de pointe : mode survie, 3 vies
+const rushCard = (cls = '') => challengeCard(rushMission(), cls === 'compact' ? '❤️ Heure de pointe' : '❤️❤️❤️ Heure de pointe · survie', cls, ' · 3 vies');
 const weeklyCard = (cls = '') => {
   const end = new Date();
   end.setDate(end.getDate() + ((7 - end.getDay()) % 7));
@@ -488,7 +490,7 @@ function renderDeparts(body) {
   };
   const crown = state.crowns?.[l.id]?.crown;
   body.innerHTML = `
-    <div class="defis">${dailyCard()}${weeklyCard()}</div>
+    <div class="defis">${dailyCard()}${weeklyCard()}${rushCard()}</div>
     <div class="line-tabs">${Object.values(LINES).map((x) => `<button type="button" class="lt${x.id === l.id ? ' on' : ''}${lineOpen(x.id) ? '' : ' locked'}" data-act="${lineOpen(x.id) ? 'line' : 'locked'}" data-id="${x.id}" data-why="${lineOpen(x.id) ? '' : esc(`${LINE_UNLOCK[x.id].stars} ★ sur la ${LINES[LINE_UNLOCK[x.id].line].name} pour débloquer`)}">${pict(x.id, 'pict-sm')}</button>`).join('')}</div>
     <section class="board">
       <div class="board-head">
@@ -914,8 +916,12 @@ export function showBrief(m) {
   const route = buildRoute(m);
   const all = route.stations.slice(1).map((st) => st.k);
   const stops = m.stops ?? all;
-  const probe = { limits: 0, signals: 0, leaves: 0, animals: 0, works: 0 };
-  m.build({ limit: () => probe.limits++, signal: () => probe.signals++, leaves: () => probe.leaves++, animal: () => probe.animals++, works: () => probe.works++, runner: () => {}, passengers: () => {} });
+  const probe = { limits: 0, signals: 0, leaves: 0, animals: 0, works: 0, alarms: 0, crossings: 0, parcels: 0, malaises: 0 };
+  m.build({
+    limit: () => probe.limits++, signal: () => probe.signals++, leaves: () => probe.leaves++, animal: () => probe.animals++, works: () => probe.works++,
+    alarm: () => probe.alarms++, cross: () => probe.crossings++, parcel: () => probe.parcels++, malaise: () => probe.malaises++,
+    runner: () => {}, passengers: () => {},
+  });
   const cond = [];
   const um = compoOf(m) === 'UM';
   cond.push(um ? '<span class="pill pill-led">Train long · 2 rames (UM)</span>' : '<span class="pill pill-ok">Train court · 1 rame (US)</span>');
@@ -931,17 +937,22 @@ export function showBrief(m) {
   if (probe.animals) cond.push('<span class="pill pill-late">Animal sur la voie</span>');
   if (probe.works) cond.push('<span class="pill pill-late">Travaux</span>');
   if (probe.signals) cond.push('<span class="pill pill-off">Signal fermé</span>');
+  if (probe.alarms) cond.push('<span class="pill pill-late">Signal d\'alarme</span>');
+  if (probe.parcels) cond.push('<span class="pill pill-late">Colis suspect</span>');
+  if (probe.malaises) cond.push('<span class="pill pill-late">Malaise voyageur</span>');
+  if (probe.crossings) cond.push('<span class="pill pill-off">Trains en face</span>');
+  if (m.lives) cond.unshift(`<span class="pill pill-led">${'❤️'.repeat(m.lives)} ${m.lives} vies</span>`);
   const g = gear(m);
   const prof = state.profile;
   const sab = pendingSabotage(m);
   const gearHtml = m.fixedRame
-    ? `<div class="gear"><div class="gear-pic">${trainSvg(m.fixedRame, g.livree)}</div><div><b>Rame imposée : ${RAMES[m.fixedRame].name}</b><small>${m.weekly ? 'Défi hebdo' : 'Défi du jour'} : tout le monde à armes égales.</small></div></div>`
+    ? `<div class="gear"><div class="gear-pic">${trainSvg(m.fixedRame, g.livree)}</div><div><b>Rame imposée : ${RAMES[m.fixedRame].name}</b><small>${m.weekly ? 'Défi hebdo' : m.rush ? 'Heure de pointe' : 'Défi du jour'} : tout le monde à armes égales.</small></div></div>`
     : `<div class="gear"><div class="gear-pic">${trainSvg(g.rame.id, g.livree)}</div><div><b>${RAMES[g.rame.id].name} · niv. ${g.rame.level}</b><small>${LIVREES[g.livree]?.name ?? ''}</small></div></div>
        ${prof && prof.rames.length > 1 ? `<div class="gear-pick">${prof.rames.map((r) => `<button type="button" class="chip-btn${r.id === g.rame.id ? ' on' : ''}" data-rame="${r.id}">${RAMES[r.id].name.split(' «')[0]}</button>`).join('')}</div>` : ''}`;
   $('brief').innerHTML = `
     <div class="board-head">
       <div>
-        <p class="board-sub">${line.name} · ${m.daily ? 'Défi du jour' : m.weekly ? 'Défi hebdo' : m.stops ? (m.stops.length <= 2 ? 'Direct' : 'Semi-direct') : 'Omnibus'} · départ ${fmtHM(m.clock)}</p>
+        <p class="board-sub">${line.name} · ${m.daily ? 'Défi du jour' : m.weekly ? 'Défi hebdo' : m.rush ? 'Heure de pointe · 3 vies' : m.stops ? (m.stops.length <= 2 ? 'Direct' : 'Semi-direct') : 'Omnibus'} · départ ${fmtHM(m.clock)}</p>
         <h2 class="board-title" style="font-size:28px">${m.title}</h2>
       </div>
       ${pict(line.id, 'pict-lg')}
