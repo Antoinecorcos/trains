@@ -16,3 +16,7 @@ database_id = "98d26ab7-8dcc-4233-96b5-349922ed5d47"
 # Journaux du Worker visibles dans le tableau de bord (Workers & Pages → ukipu → Observabilité)
 [observability]
 enabled = true
+
+# Toutes les heures (à la 17e minute) : rappels par notification (caisses pleines, chantiers, cadeau du jour)
+[triggers]
+crons = ["17 * * * *"]

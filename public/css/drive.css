@@ -707,3 +707,10 @@ button:focus-visible, input:focus-visible, .lever:focus-visible { outline: 3px s
 /* ---------- Incidents et mode survie ---------- */
 .tk-grade.passe { background: #6b3fa0; }
 .lives { font-size: 15px; letter-spacing: 1px; white-space: nowrap; }
+
+/* ---------- Notifications ---------- */
+.mh-push { position: absolute; left: 10px; right: 64px; top: 96px; z-index: 3; max-width: 520px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(13, 22, 99, 0.94); box-shadow: 0 0 0 2px var(--yellow) inset, 0 8px 24px rgba(0, 0, 0, 0.4); }
+.mp-ico { font-size: 24px; }
+.mp-mid b { display: block; font-size: 14px; font-weight: 900; }
+.mp-mid small { display: block; font-size: 12px; line-height: 1.35; color: var(--soft); font-weight: 700; }
+.mp-btns { display: grid; gap: 6px; }

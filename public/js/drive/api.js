@@ -114,5 +114,9 @@ export const api = {
   claimSeason: () => api.call('/api/season/claim', { method: 'POST' }),
   cosmetics: (b) => api.call('/api/cosmetics', { method: 'POST', body: b }),
   passCheckout: (gift) => api.call('/api/pass/checkout', { method: 'POST', body: gift ? { gift } : {}, timeout: 20000 }),
+  pushKey: () => api.call('/api/push/key'),
+  pushSubscribe: (sub) => api.call('/api/push/subscribe', { method: 'POST', body: sub }),
+  pushUnsubscribe: (endpoint) => api.call('/api/push/unsubscribe', { method: 'POST', body: { endpoint } }),
+  pushTest: () => api.call('/api/push/test', { method: 'POST' }),
   passConfirm: (sessionId) => api.call('/api/pass/confirm', { method: 'POST', body: { session_id: sessionId } }),
 };

@@ -48,6 +48,13 @@ DELETE FROM boxes; DELETE FROM staff; DELETE FROM stations; DELETE FROM caisses;
 
 Dans le jeu, le bouton **➕ Inviter des potes** (onglet Classement) envoie aussi un lien.
 
+## Notifications
+
+Rien à configurer : le serveur crée ses clés de notification au premier besoin et envoie les
+rappels toutes les heures (tâche planifiée visible dans **Workers & Pages → ukipu → Paramètres →
+Déclencheurs**). Sur iPhone, chaque joueur doit ajouter le jeu à l'écran d'accueil puis toucher
+« Activer » sur la carte.
+
 ## 5. La première semaine
 
 - Le **Bulletin du lundi** (Classement → 📰) se partage en image : c'est le rendez-vous du groupe.

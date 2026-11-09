@@ -29,6 +29,8 @@
 | **Sabotage (V2)** | Un jeton par jour : on envoie un incident (signal capricieux, sanglier, feuilles, travaux, quais bondés) sur le prochain service d'un pote, sur une ligne qu'il exploite. 2 ★ sans percuter ni franchir de signal : il le déjoue et gagne le bonus ; sinon le saboteur l'empoche. Tout part dans le fil d'actu. Jamais sur les défis à armes égales. |
 | **Semaine (V2)** | **Défi hebdo** (plus long, deux aléas par interstation, Z 2N imposée) : son meilleur score prend la **couronne de régulateur** 🎖️. **U d'Or** 🏆 : le pire service de la semaine (score le plus bas par rapport au potentiel). **Bulletin trafic du lundi** à copier dans le groupe. |
 | **Saison et Pass (V2.4)** | Saison mensuelle à 20 paliers (piste gratuite pour tous). **Pass Navigo** à 2,99 € le mois, paiement unique, offrable : piste Pass avec 2 Colis Navigo (carte légendaire garantie), livrée du mois, klaxon, traînée et emote du fantôme, badge, nom de rame, cadre doré, caisses à 8 h et 3 chantiers. Ni rames, ni points, ni avantage sur les défis. Paiement Stripe. |
+| **Incidents et survie (V2.5)** | Signal d'alarme, gare évacuée (colis suspect), malaise voyageur, trains en sens inverse (code ou salut au klaxon). Mode **Heure de pointe** hebdomadaire : 10 arrêts, 3 vies, rame imposée, classement. Annonces sonores en gare. |
+| **Notifications (V2.6)** | Web Push : couronne volée, sabotage, Pass offert, caisses pleines, chantier terminé, cadeau du jour. Heures calmes 23 h – 8 h. Rappels par tâche horaire du Worker. |
 | **Confiance** | Le serveur rejoue chaque partie à partir du journal des commandes : impossible d'envoyer un faux score ou de rouler avec une rame qu'on ne possède pas. |
 
 Pas encore fait : mode duo, technicentre (usure des

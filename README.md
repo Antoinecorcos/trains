@@ -8,6 +8,13 @@
 
 Le document de game design est dans [`docs/GDD.md`](docs/GDD.md).
 
+## V2.6 — notifications
+
+- **Notifications sur le téléphone et le PC** : couronne volée, sabotage reçu, sabotage déjoué ou réussi, Pass offert, caisses pleines, chantier terminé, cadeau du jour à ne pas rater. Jamais entre 23 h et 8 h.
+- Sur iPhone : ajouter le jeu à l'écran d'accueil (iOS 16.4 ou plus), puis l'activer depuis la carte ou le compte.
+- Rien à configurer côté Cloudflare : les clés sont créées automatiquement, les rappels partent toutes les heures (tâche planifiée du Worker).
+- Test de bout en bout : `node tools/push-test.js` (faux service de notification local, déchiffrement et vérification de signature).
+
 ## V2.5 — incidents et heure de pointe
 
 - **Nouveaux incidents** : signal d'alarme tiré (s'arrêter dans les 380 m, attendre la levée de doute), colis suspect (gare évacuée à traverser sans s'arrêter), malaise voyageur (portes ouvertes jusqu'à l'arrivée des secours), trains qui croisent en sens inverse (code la nuit, coup de klaxon pour saluer le collègue le jour).
@@ -133,4 +140,4 @@ node tools/headless.js 30 bot
 | `public/js/render.js` | Dessin du TCO (schéma de ligne) sur Canvas |
 | `public/js/main.js` | Boucle de jeu, panneaux, écrans |
 | `tools/headless.js` | Simulations sans affichage pour l'équilibrage |
-| `tools/drive-test.js`, `tools/api-test.js` | Tests du mode conduite et de l'API |
+| `tools/drive-test.js`, `tools/api-test.js`, `tools/push-test.js` | Tests du mode conduite, de l'API et des notifications |

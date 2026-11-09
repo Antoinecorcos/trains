@@ -255,7 +255,7 @@ export async function sabotage(env, user, b, now = Date.now()) {
     env.DB.prepare('INSERT INTO sabotages (from_user, to_user, line, kind, at) VALUES (?, ?, ?, ?, ?)').bind(user.id, target.id, line, kind, now),
     env.DB.prepare('UPDATE wallet SET last_sabo = ? WHERE user_id = ?').bind(today, user.id),
   ]);
-  return { pseudo: target.pseudo, line, kind };
+  return { pseudo: target.pseudo, targetId: target.id, line, kind };
 }
 
 export async function pendingSabotage(env, userId, line) {

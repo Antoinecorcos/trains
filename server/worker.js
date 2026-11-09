@@ -16,6 +16,8 @@ import {
 } from './saison.js';
 import { xpFor } from '../public/js/drive/saison.js';
 import { VERSION } from '../public/js/drive/version.js';
+import { PUSH_SCHEMA, publicKey, subscribe, unsubscribe, notify } from './push.js';
+import { cron } from './cron.js';
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -64,16 +66,30 @@ const SCHEMA = [
 
 let schemaReady = false;
 
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA, ...NETWORK_SCHEMA, ...SAISON_SCHEMA, ...PUSH_SCHEMA].map((q) => env.DB.prepare(q)));
+  for (const q of [...MIGRATIONS, ...NETWORK_MIGRATIONS, ...SAISON_MIGRATIONS]) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
+  schemaReady = true;
+}
+
+// Les notifications partent en arrière-plan : la réponse au joueur n'attend pas les services de notification
+const withBackground = (env, ctx) => Object.assign(Object.create(env), {
+  bg: (p) => (ctx?.waitUntil ? ctx.waitUntil(Promise.resolve(p).catch((e) => console.error('bg', e))) : p),
+});
+
 export default {
-  async fetch(req, env) {
+  // Toutes les heures : rappels (caisses pleines, chantiers terminés, cadeau du jour)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => { await ensureSchema(env); await cron(env, event.scheduledTime); })().catch((e) => console.error('cron', e)));
+  },
+
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
+    env = withBackground(env, ctx);
     try {
-      if (!schemaReady) {
-        await env.DB.batch([...SCHEMA, ...ECONOMY_SCHEMA, ...NETWORK_SCHEMA, ...SAISON_SCHEMA].map((q) => env.DB.prepare(q)));
-        for (const q of [...MIGRATIONS, ...NETWORK_MIGRATIONS, ...SAISON_MIGRATIONS]) { try { await env.DB.prepare(q).run(); } catch { /* colonne déjà présente */ } }
-        schemaReady = true;
-      }
+      await ensureSchema(env);
       return await route(req, env, url);
     } catch (e) {
       const status = e.status || 500;
@@ -141,6 +157,7 @@ async function route(req, env, url) {
   if (p === '/api/sabotage' && m === 'POST') {
     const u = await auth(req, env);
     const r = await sabotage(env, u, await body(req));
+    env.bg(notify(env, r.targetId, { title: '😈 Sabotage !', body: `${u.pseudo} t'a saboté sur la ${LINES[r.line].name} : ${SABOTAGES[r.kind].text}. Déjoue-le sur ton prochain service !`, url: '/?tab=reseau', tag: 'sabotage' }));
     return json({ ...r, network: await network(env, u) });
   }
   if (p === '/api/targets' && m === 'GET') return targets(env, await auth(req, env));
@@ -168,6 +185,16 @@ async function route(req, env, url) {
     return json({ ...(await confirm(env, u, b.session_id, addEvent)), season: await seasonState(env, u) });
   }
   if (p === '/api/stripe/webhook' && m === 'POST') return json(await webhook(env, req, addEvent));
+  // Notifications
+  if (p === '/api/push/key' && m === 'GET') return json({ key: await publicKey(env) });
+  if (p === '/api/push/subscribe' && m === 'POST') { const u = await auth(req, env); await subscribe(env, u, await body(req), url.origin); return json({ ok: true }); }
+  if (p === '/api/push/unsubscribe' && m === 'POST') { const u = await auth(req, env); const b = await body(req); await unsubscribe(env, u, b.endpoint); return json({ ok: true }); }
+  if (p === '/api/push/test' && m === 'POST') {
+    const u = await auth(req, env);
+    const r = await notify(env, u.id, { title: '🚆 Ukipu', body: 'Les notifications marchent : on te préviendra quand on te vole une couronne.', url: '/', tag: 'test' }, { force: true });
+    return json(r);
+  }
+  if (p === '/api/cron' && m === 'POST' && env.PUSH_TEST_ALLOW === '1') return json(await cron(env, Date.now(), { force: true })); // tests locaux
   throw new HttpError(404, 'Adresse inconnue.');
 }
 
@@ -346,6 +373,9 @@ async function submitRun(env, user, b) {
     crown = true;
     if (leaderBefore && leaderBefore.user_id !== user.id) {
       dethroned = leaderBefore.pseudo;
+      env.bg(notify(env, leaderBefore.user_id, mission.weekly
+        ? { title: '🎖️ Couronne de régulateur perdue', body: `${user.pseudo} te prend le défi hebdo avec ${fmt(res.score)} pts. Reprends-la !`, url: '/?tab=classement', tag: `crown-${mission.id}` }
+        : { title: '👑 Couronne volée !', body: `${user.pseudo} t'a pris la tête de « ${mission.title} » (${fmt(res.score)} pts).`, url: '/?tab=departs', tag: `crown-${mission.id}` }));
       await addEvent(env, 'crown', mission.weekly
         ? `🎖️ ${user.pseudo} prend la couronne de régulateur de la semaine à ${dethroned} (${fmt(res.score)} pts).`
         : `👑 ${user.pseudo} prend la tête de « ${mission.title} » (${fmt(res.score)} pts) et détrône ${dethroned}.`);
@@ -368,6 +398,9 @@ async function submitRun(env, user, b) {
     const what = SABOTAGES[sab.kind].name.toLowerCase();
     const bonus = foiled ? Math.round(80 * (fx.foil ?? 1)) : 60;
     await env.DB.prepare('UPDATE sabotages SET state = ?, done_at = ? WHERE id = ?').bind(foiled ? 'foiled' : 'success', now, sab.id).run();
+    env.bg(notify(env, sab.from_user, foiled
+      ? { title: '🛡️ Sabotage déjoué', body: `${user.pseudo} a déjoué ton sabotage sur la ${LINES[mission.line].name}. Raté !`, url: '/?tab=classement', tag: 'sabotage-result' }
+      : { title: '😈 Sabotage réussi', body: `Ton sabotage a eu raison de ${user.pseudo} sur la ${LINES[mission.line].name} : +${bonus} 🎟`, url: '/?tab=classement', tag: 'sabotage-result' }));
     if (foiled) {
       await addTickets(env, user.id, bonus);
       await addEvent(env, 'sabotage', `🛡️ ${user.pseudo} a déjoué le sabotage de ${sab.by} (${what}) sur la ${LINES[mission.line].name}.`);

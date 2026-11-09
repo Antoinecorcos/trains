@@ -6,6 +6,7 @@ import {
 } from '../public/js/drive/saison.js';
 import { LIVREES } from '../public/js/drive/route.js';
 import { addTickets, addBox } from './economy.js';
+import { notify } from './push.js';
 
 export const SAISON_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS season_xp (
@@ -217,6 +218,10 @@ export async function grantFromSession(env, s, addEvent) {
   await addEvent(env, 'pass', buyer === target
     ? `🎫 ${name(target)} a pris son Pass Navigo de ${seasonName(season)}.`
     : `🎁 ${name(buyer)} a offert le Pass Navigo de ${seasonName(season)} à ${name(target)} !`);
+  if (buyer !== target) {
+    const p = notify(env, target, { title: '🎁 Pass Navigo offert !', body: `${name(buyer)} t'offre le Pass Navigo de ${seasonName(season)}. Va récupérer tes récompenses !`, url: '/?tab=saison', tag: 'pass' }, { force: true });
+    if (env.bg) env.bg(p); else await p;
+  }
   return { season, target, gift: buyer !== target };
 }
 

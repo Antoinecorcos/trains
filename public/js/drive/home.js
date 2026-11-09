@@ -9,6 +9,7 @@ import {
 import { api } from './api.js';
 import { mountNetMap } from './netmap.js';
 import { VERSION } from './version.js';
+import { pushState, enablePush } from './push.js';
 import { trophyCard, bulletinCard, shareCanvas, invite } from './share.js';
 import {
   TIERS, track, rewardLabel, THEMES, cosmeticLabel, PASS_PERKS,
@@ -218,6 +219,8 @@ async function onHomeClick(e) {
       showHome('classement');
     } catch (err) { C.toast(err.message); }
   } else if (a === 'bulletin') openBulletin();
+  else if (a === 'push-on') turnPushOn();
+  else if (a === 'push-later') { C.store.set('ukipu.push.later', Date.now()); const el = $('mh-push'); if (el) el.hidden = true; }
   else if (a === 'invite') {
     const how = await invite(api.user?.pseudo);
     if (how === 'copied') C.toast('Invitation copiée : colle-la dans le groupe');
@@ -271,6 +274,7 @@ function renderReseau(body) {
           <span class="mh-chip">★ ${totalStars()}</span>
         </span>
       </div>
+      <div class="mh-push" id="mh-push" hidden></div>
       <div class="mh-ticker"><span class="ticker-tag">Info</span><div class="ticker-win"><span id="mh-ticker-text">Touche une ligne pour voir ses départs · pince pour zoomer</span></div></div>
       <div class="mh-zoom">
         <button type="button" data-act="zoom-in" aria-label="Zoomer">+</button>
@@ -306,6 +310,7 @@ function renderReseau(body) {
       el.style.animationDuration = `${Math.max(14, el.textContent.length / 6)}s`;
     }).catch(() => {});
     if (!api.loggedIn && !state.askedLogin && !showIntroIfNew()) { state.askedLogin = true; openAccountModal(); }
+    if (api.loggedIn) offerPush();
   }
 }
 
@@ -348,6 +353,31 @@ export function showIntroIfNew() {
   });
   render();
   return true;
+}
+
+// Propose d'activer les notifications (une fois par semaine au plus si on refuse)
+async function offerPush() {
+  const later = C.store.get('ukipu.push.later', 0);
+  if (Date.now() - later < 7 * 86400000) return;
+  const st = await pushState();
+  const el = $('mh-push');
+  if (!el || (st !== 'off' && st !== 'install')) return;
+  el.innerHTML = st === 'install'
+    ? `<span class="mp-ico">🔔</span><span class="mp-mid"><b>Notifications sur iPhone</b><small>Partager → « Sur l'écran d'accueil », puis ouvre Ukipu depuis son icône pour être prévenu quand on te vole une couronne.</small></span><button class="pill pill-off" type="button" data-act="push-later">OK</button>`
+    : `<span class="mp-ico">🔔</span><span class="mp-mid"><b>Ne rate plus rien</b><small>Couronne volée, sabotage, caisse pleine, chantier fini. Jamais la nuit.</small></span><span class="mp-btns"><button class="pill pill-good" type="button" data-act="push-on">Activer</button><button class="pill pill-off" type="button" data-act="push-later">Plus tard</button></span>`;
+  el.hidden = false;
+}
+
+export async function turnPushOn() {
+  try {
+    await enablePush();
+    C.audio.good();
+    C.toast('🔔 Notifications activées');
+    api.pushTest().catch(() => {});
+    const el = $('mh-push');
+    if (el) el.hidden = true;
+    return true;
+  } catch (err) { C.toast(err.message); return false; }
 }
 
 export function openAccountModal() {

@@ -10,7 +10,8 @@ import {
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { api } from './api.js';
-import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage, openAccountModal, handlePassReturn } from './home.js';
+import { initHome, showHome, showBrief, gear, state as home, refreshProfile, openBoxFlow, missionOpen, applySabotage, openAccountModal, handlePassReturn, turnPushOn } from './home.js';
+import { pushState, disablePush, refreshPush } from './push.js';
 
 const $ = (id) => document.getElementById(id);
 const fr0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -95,8 +96,14 @@ function renderAccount() {
         <span class="acc-btns">
           <button class="pill pill-off" type="button" id="btn-logout">Déconnexion</button>
         </span>
+      </div>
+      <div class="row acc-row">
+        <span class="row-time small">🔔</span>
+        <span class="row-mid"><span class="row-dest">Notifications</span><span class="row-type" id="push-state">…</span></span>
+        <span class="acc-btns" id="push-btns"></span>
       </div>`;
-    $('btn-logout').onclick = async () => { await api.logout(); home.profile = null; showHome('reseau'); };
+    $('btn-logout').onclick = async () => { await disablePush().catch(() => {}); await api.logout(); home.profile = null; showHome('reseau'); };
+    renderPushRow();
     return;
   }
   el.innerHTML = `
@@ -130,6 +137,27 @@ function renderAccount() {
   };
   $('acc-form').onsubmit = (e) => { e.preventDefault(); go('login'); };
   $('btn-register').onclick = () => go('register');
+}
+
+// Ligne « Notifications » du compte : activer, tester, couper
+async function renderPushRow() {
+  const st = await pushState();
+  const lbl = $('push-state');
+  const btns = $('push-btns');
+  if (!lbl || !btns) return;
+  lbl.textContent = {
+    on: 'Activées sur cet appareil',
+    off: 'Couronne volée, sabotage, caisse pleine…',
+    denied: 'Bloquées dans les réglages du navigateur',
+    install: 'iPhone : ajoute d\'abord Ukipu à l\'écran d\'accueil',
+    unsupported: 'Pas disponibles sur ce navigateur',
+  }[st];
+  btns.innerHTML = st === 'on'
+    ? '<button class="pill pill-ok" type="button" id="push-test">Tester</button><button class="pill pill-off" type="button" id="push-off">Couper</button>'
+    : st === 'off' ? '<button class="pill pill-good" type="button" id="push-on">Activer</button>' : '';
+  if ($('push-on')) $('push-on').onclick = async () => { if (await turnPushOn()) renderPushRow(); };
+  if ($('push-off')) $('push-off').onclick = async () => { await disablePush(); toast('Notifications coupées sur cet appareil'); renderPushRow(); };
+  if ($('push-test')) $('push-test').onclick = async () => { try { const r = await api.pushTest(); toast(r.sent ? 'Notification envoyée' : 'Aucun appareil n\'a reçu la notification'); } catch (e) { toast(e.message); } };
 }
 
 const ago = (at) => {
@@ -988,6 +1016,13 @@ function boot() {
     flushPending();
     handlePassReturn();
     checkVersion();
+    refreshPush();
+    const q = new URLSearchParams(location.search);
+    const tab = q.get('tab');
+    if (tab && ['reseau', 'departs', 'depot', 'saison', 'classement'].includes(tab)) {
+      history.replaceState(null, '', location.pathname);
+      if (!$('screen-start').hidden) showHome(tab);
+    }
   });
 }
 
